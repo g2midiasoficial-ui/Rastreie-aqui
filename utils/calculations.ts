@@ -19,7 +19,8 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     pixTaxPercent,
     newTaxPercent,
     adsTaxPercent,
-    fixedFee
+    fixedFee,
+    marketplaceCommissionPercent
   } = data;
   
   // 1. CMV (Custo de Mercadoria Vendida)
@@ -45,15 +46,18 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   if (platform === Platform.DROPSHIPPING) {
     yampiFee = finalPrice * (yampiFeePercent / 100);
   } else {
-    // Apenas taxa fixa se houver, marketplaceCommission removida.
-    marketplaceFees = fixedFee;
+    // Marketplace: Comissão % + Taxa Fixa
+    marketplaceFees = (finalPrice * (marketplaceCommissionPercent / 100)) + fixedFee;
   }
   
   // 5. Financeiro (Gateway e Checkout)
-  const cardFee = finalPrice * (cardTaxPercent / 100);
+  // No marketplace, taxas financeiras geralmente já estão na comissão, 
+  // exceto se o usuário usar antecipação extra. Mantemos opcional.
+  const cardFee = platform === Platform.DROPSHIPPING ? finalPrice * (cardTaxPercent / 100) : 0;
+  const gatewayCost = platform === Platform.DROPSHIPPING ? finalPrice * (data.gatewayFee / 100) : 0;
+  
   const reserveFee = finalPrice * (paymentReservePercent / 100);
   const pixFee = finalPrice * (pixTaxPercent / 100);
-  const gatewayCost = finalPrice * (data.gatewayFee / 100);
   const newTaxFee = finalPrice * (newTaxPercent / 100);
   
   // 6. Impostos Fiscais (Venda)
@@ -92,6 +96,11 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const monthlyRevenue = finalPrice * estimatedMonthlySales;
   const monthlyProfitProjection = (profit * estimatedMonthlySales) - fixedOpCost;
   
+  // Cálculo de Gastos com Ads (Projeção baseada nas vendas estimadas)
+  const adSpend30Days = marketingCost * estimatedMonthlySales;
+  const adSpend1Day = adSpend30Days / 30;
+  const adSpend7Days = adSpend1Day * 7;
+
   // Bússola Metrics
   const maxCPA = profit + marketingCost;
   const cpaIdeal = Math.max(0, maxCPA - (finalPrice * 0.15));
@@ -132,12 +141,30 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     icIdeal,
     icMax,
     contributionMargin,
-    totalFeesOnly
+    totalFeesOnly,
+    adSpend1Day,
+    adSpend7Days,
+    adSpend30Days
   };
 };
 
 export const formatCurrency = (value: number, currency: CurrencyCode = 'BRL') => {
-  const locale = currency === 'BRL' ? 'pt-BR' : currency === 'USD' ? 'en-US' : 'de-DE';
+  const locales: Record<CurrencyCode, string> = {
+    'BRL': 'pt-BR',
+    'USD': 'en-US',
+    'EUR': 'de-DE',
+    'GBP': 'en-GB',
+    'JPY': 'ja-JP',
+    'CNY': 'zh-CN',
+    'ARS': 'es-AR',
+    'CLP': 'es-CL',
+    'MXN': 'es-MX',
+    'COP': 'es-CO',
+    'PEN': 'es-PE'
+  };
+  
+  const locale = locales[currency] || 'en-US';
+  
   return new Intl.NumberFormat(locale, { 
     style: 'currency', 
     currency: currency,
@@ -150,6 +177,14 @@ export const getCurrencySymbol = (currency: CurrencyCode) => {
   switch(currency) {
     case 'USD': return '$';
     case 'EUR': return '€';
+    case 'GBP': return '£';
+    case 'JPY': return '¥';
+    case 'CNY': return '¥';
+    case 'ARS': return '$';
+    case 'CLP': return '$';
+    case 'MXN': return '$';
+    case 'COP': return '$';
+    case 'PEN': return 'S/';
     default: return 'R$';
   }
 };

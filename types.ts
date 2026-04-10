@@ -11,7 +11,7 @@ export enum TaxRegime {
   LUCRO_PRESUMIDO = 'Lucro Presumido'
 }
 
-export type CurrencyCode = 'BRL' | 'USD' | 'EUR';
+export type CurrencyCode = 'BRL' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CNY' | 'ARS' | 'CLP' | 'MXN' | 'COP' | 'PEN';
 
 export interface PricingData {
   currency: CurrencyCode;
@@ -20,6 +20,7 @@ export interface PricingData {
   packagingCost: number;
   shippingLabel: number;
   fixedFee: number;
+  marketplaceCommissionPercent: number; // Nova propriedade
   gatewayFee: number;
   marketingPercent: number;
   fixedOpCost: number;
@@ -68,4 +69,8 @@ export interface CalculationResult {
   icMax: number;
   contributionMargin: number;
   totalFeesOnly: number;
+  // Métricas de Ads Solicitadas
+  adSpend1Day: number;
+  adSpend7Days: number;
+  adSpend30Days: number;
 }

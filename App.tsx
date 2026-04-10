@@ -15,7 +15,8 @@ import {
   Coins as CoinsIcon,
   BarChart4,
   MousePointer,
-  Clock
+  Clock,
+  Briefcase
 } from 'lucide-react';
 import { Platform, PricingData, CalculationResult, TaxRegime, CurrencyCode } from './types.ts';
 import { calculatePricing, formatCurrency, getCurrencySymbol } from './utils/calculations.ts';
@@ -26,14 +27,6 @@ import {
 const MARKUP_STEPS = [1.2, 1.5, 1.8, 2.0, 2.2, 2.5, 2.8, 3.0, 3.5, 4.0, 5.0];
 
 type ProductStatus = 'Mineração' | 'Teste' | 'Validação' | 'Escala' | 'Descontinuado';
-
-interface ProductItem {
-  id: string;
-  name: string;
-  image: string;
-  status: ProductStatus;
-  addedAt: string;
-}
 
 interface DailyHistoryEntry {
   id: string;
@@ -63,35 +56,52 @@ export default function App() {
   });
   const [showLogin, setShowLogin] = useState(false);
   
-  const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'metas' | 'daily' | 'compass' | 'esteira' | 'simulation'>('overview');
+  const [platform, setPlatform] = useState<Platform>(() => {
+    const saved = localStorage.getItem('gerenciie_platform');
+    return (saved as Platform) || Platform.DROPSHIPPING;
+  });
+  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'daily' | 'compass' | 'simulation'>(() => {
+    const saved = localStorage.getItem('gerenciie_active_tab');
+    return (saved as any) || 'overview';
+  });
+  const [funnelFilter, setFunnelFilter] = useState<'all' | 'top' | 'middle' | 'bottom'>(() => {
+    const saved = localStorage.getItem('gerenciie_funnel_filter');
+    return (saved as any) || 'all';
+  });
   
-  const [pricingData, setPricingData] = useState<PricingData>({
-    currency: 'BRL',
-    costPrice: 52.50,
-    freightIn: 5.00,
-    packagingCost: 2.00,
-    shippingLabel: 0,
-    fixedFee: 5,
-    gatewayFee: 0,
-    marketingPercent: 25,
-    fixedOpCost: 1500,
-    taxPercent: 6,
-    desiredMarkup: 2.5,
-    estimatedMonthlySales: 200,
-    taxRegime: TaxRegime.SIMPLES_NACIONAL,
-    cardTaxPercent: 5.99,
-    paymentReservePercent: 5,
-    yampiFeePercent: 2.5,
-    icmsPercent: 17,
-    pixTaxPercent: 1,
-    newTaxPercent: 0,
-    adsTaxPercent: 4.38
+  const [pricingData, setPricingData] = useState<PricingData>(() => {
+    const saved = localStorage.getItem('gerenciie_pricing_data');
+    return saved ? JSON.parse(saved) : {
+      currency: 'BRL',
+      costPrice: 52.50,
+      freightIn: 5.00,
+      packagingCost: 2.00,
+      shippingLabel: 0,
+      fixedFee: 0,
+      marketplaceCommissionPercent: 0,
+      gatewayFee: 0,
+      marketingPercent: 25,
+      fixedOpCost: 1500,
+      taxPercent: 6,
+      desiredMarkup: 2.5,
+      estimatedMonthlySales: 200,
+      taxRegime: TaxRegime.SIMPLES_NACIONAL,
+      cardTaxPercent: 5.99,
+      paymentReservePercent: 5,
+      yampiFeePercent: 2.5,
+      icmsPercent: 0,
+      pixTaxPercent: 1,
+      newTaxPercent: 0,
+      adsTaxPercent: 4.38
+    };
   });
 
-  const [simBudget, setSimBudget] = useState<number>(200);
-  const [simPeriod, setSimPeriod] = useState<1 | 7 | 30>(30);
+  const [scaleMultiplier, setScaleMultiplier] = useState<number>(() => {
+    const saved = localStorage.getItem('gerenciie_scale_multiplier');
+    return saved ? parseFloat(saved) : 2;
+  });
 
+  // States para Métricas Diárias
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dailyAds, setDailyAds] = useState({
     spend: 0,
@@ -100,20 +110,9 @@ export default function App() {
     atc: 0,
     ic: 0,
     sales: 0,
-    manualRevenue: 0
+    revenue: 0
   });
 
-  const [targetProfit, setTargetProfit] = useState<number>(10000);
-
-  const [products, setProducts] = useState<ProductItem[]>(() => {
-    const saved = localStorage.getItem('gerenciie_products');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'Smartwatch Ultra 9', image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=400', status: 'Escala', addedAt: new Date().toISOString() },
-      { id: '2', name: 'Fone Noise Cancelling', image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400', status: 'Teste', addedAt: new Date().toISOString() }
-    ];
-  });
-
-  const [newProduct, setNewProduct] = useState({ name: '', image: '', status: 'Mineração' as ProductStatus });
   const [dailyHistory, setDailyHistory] = useState<DailyHistoryEntry[]>(() => {
     const saved = localStorage.getItem('gerenciie_daily_history');
     return saved ? JSON.parse(saved) : [];
@@ -124,115 +123,115 @@ export default function App() {
   }, [dailyHistory]);
 
   useEffect(() => {
-    localStorage.setItem('gerenciie_products', JSON.stringify(products));
-  }, [products]);
+    localStorage.setItem('gerenciie_platform', platform);
+  }, [platform]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_funnel_filter', funnelFilter);
+  }, [funnelFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_pricing_data', JSON.stringify(pricingData));
+  }, [pricingData]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_scale_multiplier', scaleMultiplier.toString());
+  }, [scaleMultiplier]);
+
+  useEffect(() => {
+    if (platform === Platform.SHOPEE) {
+      setPricingData(prev => ({
+        ...prev,
+        marketplaceCommissionPercent: 14,
+        fixedFee: 4,
+        yampiFeePercent: 0,
+        cardTaxPercent: 0,
+        gatewayFee: 0
+      }));
+    } else if (platform === Platform.MERCADO_LIVRE) {
+      setPricingData(prev => ({
+        ...prev,
+        marketplaceCommissionPercent: 11.5,
+        fixedFee: 6,
+        yampiFeePercent: 0,
+        cardTaxPercent: 0,
+        gatewayFee: 0
+      }));
+    } else {
+      setPricingData(prev => ({
+        ...prev,
+        marketplaceCommissionPercent: 0,
+        fixedFee: 0,
+        yampiFeePercent: 2.5,
+        cardTaxPercent: 4.99,
+        gatewayFee: 1
+      }));
+    }
+  }, [platform]);
 
   const currentResult = useMemo(() => calculatePricing(pricingData, pricingData.desiredMarkup, platform), [pricingData, platform]);
 
-  const simulationResults = useMemo(() => {
-    const scenarios = [
-      { name: 'Pior Cenário', cpm: 35, ctr: 0.8, cvr: 0.8, color: '#f43f5e', theme: 'rose' },
-      { name: 'Médio Cenário', cpm: 25, ctr: 1.2, cvr: 1.8, color: '#64748b', theme: 'slate' },
-      { name: 'Melhor Cenário', cpm: 18, ctr: 2.2, cvr: 3.5, color: '#10b981', theme: 'emerald' }
-    ];
-
-    return scenarios.map(s => {
-      const dailyImpressions = (simBudget / s.cpm) * 1000;
-      const dailyClicks = dailyImpressions * (s.ctr / 100);
-      const dailySales = dailyClicks * (s.cvr / 100);
-      
-      const totalSales = Math.floor(dailySales * simPeriod);
-      const totalRevenue = totalSales * currentResult.finalPrice;
-      const totalBudget = simBudget * simPeriod;
-      const totalImpressions = dailyImpressions * simPeriod;
-      const totalClicks = dailyClicks * simPeriod;
-      
-      const periodFixedCost = (pricingData.fixedOpCost / 30) * simPeriod;
-      
-      // Variable costs excluding marketing (since budget is manual)
-      const unitVariableCostsNoAds = (currentResult.totalFeesOnly / currentResult.finalPrice) * currentResult.finalPrice - (currentResult.marketingCost + currentResult.marketingAdsTax);
-      const totalVarCosts = (totalSales * (unitVariableCostsNoAds + currentResult.unitCMV));
-      
-      const profit = totalRevenue - totalVarCosts - totalBudget - periodFixedCost;
-      const roas = totalBudget > 0 ? totalRevenue / totalBudget : 0;
-      const cpa = totalSales > 0 ? totalBudget / totalSales : 0;
-      const cpc = totalClicks > 0 ? totalBudget / totalClicks : 0;
-      const roi = (totalVarCosts + totalBudget) > 0 ? (profit / (totalVarCosts + totalBudget)) * 100 : 0;
-      
-      const atc = Math.floor(totalClicks * 0.08); // 8% ATC rate
-      const ic = Math.floor(atc * 0.35); // 35% IC rate from ATC
-
-      return {
-        ...s,
-        cpa,
-        sales: totalSales,
-        revenue: totalRevenue,
-        profit,
-        roas,
-        impressions: totalImpressions,
-        clicks: totalClicks,
-        atc,
-        ic,
-        cpc,
-        roi
-      };
-    });
-  }, [simBudget, simPeriod, currentResult, pricingData.fixedOpCost]);
-
-  const goalCalculations = useMemo(() => {
-    const unitProfit = currentResult.profit > 0 ? currentResult.profit : 0.01;
-    const unitsNeeded = Math.ceil((targetProfit + pricingData.fixedOpCost) / unitProfit);
-    const revenueGoal = unitsNeeded * currentResult.finalPrice;
-    const salesPerDay = Math.ceil(unitsNeeded / 30);
-    const totalAdSpend = unitsNeeded * currentResult.marketingCost;
-    const targetROAS = totalAdSpend > 0 ? revenueGoal / totalAdSpend : 0;
-    return { unitsNeeded, revenueGoal, salesPerDay, targetROAS };
-  }, [targetProfit, currentResult, pricingData.fixedOpCost]);
-
-  const dailyStats = useMemo(() => {
-    const revenue = dailyAds.manualRevenue || (dailyAds.sales * currentResult.finalPrice);
-    const realCPA = dailyAds.sales > 0 ? dailyAds.spend / dailyAds.sales : 0;
-    const realROAS = dailyAds.spend > 0 ? revenue / dailyAds.spend : 0;
-    const ctr = (dailyAds.clicks / (dailyAds.impressions || 1)) * 100;
-    const atcRate = (dailyAds.atc / (dailyAds.clicks || 1)) * 100;
-    const cpc = dailyAds.clicks > 0 ? dailyAds.spend / dailyAds.clicks : 0;
-    const cpm = dailyAds.impressions > 0 ? (dailyAds.spend / dailyAds.impressions) * 1000 : 0;
-    const cvr = dailyAds.clicks > 0 ? (dailyAds.sales / dailyAds.clicks) * 100 : 0;
+  const dailyMetrics = useMemo(() => {
+    const { spend, revenue, sales, impressions, clicks, atc } = dailyAds;
+    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
     
     return {
-      revenue, realCPA, realROAS, ctr, atcRate, cpc, cpm, cvr,
-      isCPAGood: realCPA > 0 && realCPA <= currentResult.maxCPA,
-      isROASGood: realROAS >= (currentResult.finalPrice / currentResult.maxCPA),
-      healthStatus: realCPA === 0 ? 'neutral' : (realCPA <= currentResult.cpaIdeal ? 'scale' : (realCPA <= currentResult.maxCPA ? 'maintain' : 'danger'))
+      roas: spend > 0 ? revenue / spend : 0,
+      cpa: sales > 0 ? spend / sales : 0,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0,
+      cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+      cvr: clicks > 0 ? (sales / clicks) * 100 : 0,
+      atcRate: clicks > 0 ? (atc / clicks) * 100 : 0,
+      profit: revenue - (unitVariableCostsNoAds * sales) - spend
     };
-  }, [dailyAds, currentResult]);
+  }, [dailyAds, currentResult, pricingData]);
 
-  const saveDailyMetrics = () => {
-    if (dailyAds.spend === 0 && dailyAds.sales === 0) return;
-    const entry: DailyHistoryEntry = {
-      id: Date.now().toString(),
-      date: selectedDate,
-      spend: dailyAds.spend,
-      impressions: dailyAds.impressions,
-      clicks: dailyAds.clicks,
-      atc: dailyAds.atc,
-      ic: dailyAds.ic,
-      sales: dailyAds.sales,
-      revenue: dailyStats.revenue,
-      profit: dailyStats.revenue - (dailyAds.sales * currentResult.unitCMV) - (dailyAds.sales * (currentResult.totalFeesOnly / currentResult.finalPrice * currentResult.finalPrice)) - dailyAds.spend,
-      cpa: dailyStats.realCPA,
-      roas: dailyStats.realROAS,
-      ctr: dailyStats.ctr,
-      atcRate: dailyStats.atcRate,
-      cpc: dailyStats.cpc,
-      cpm: dailyStats.cpm,
-      cvr: dailyStats.cvr,
-      status: dailyStats.healthStatus === 'danger' ? 'bad' : (dailyStats.healthStatus === 'scale' ? 'good' : 'warning'),
-      platform: platform
+  const scaleOrientation = useMemo(() => {
+    if (dailyAds.spend === 0) return { status: 'neutral', message: 'Aguardando dados de investimento para análise.' };
+    
+    const { cpa, roas, profit } = dailyMetrics;
+    const { maxCPA, cpaIdeal } = currentResult;
+
+    if (cpa > 0 && cpa <= cpaIdeal && profit > 0) {
+      return { 
+        status: 'scale', 
+        message: '🔥 OPORTUNIDADE DE ESCALA: Seus custos estão abaixo do ideal e a operação está lucrativa. Aumente o orçamento gradualmente (15-20%).' 
+      };
+    } else if (cpa > cpaIdeal && cpa <= maxCPA) {
+      return { 
+        status: 'maintain', 
+        message: '✅ OPERAÇÃO ESTÁVEL: Você está dentro da margem de segurança. Mantenha o orçamento e foque em otimizar criativos para baixar o CPA.' 
+      };
+    } else if (cpa > maxCPA) {
+      return { 
+        status: 'pause', 
+        message: '🚨 ALERTA DE PREJUÍZO: Seu CPA ultrapassou o Breakeven. Pause ou reduza drasticamente o orçamento. Verifique oferta e criativos imediatamente.' 
+      };
+    } else if (dailyAds.spend > 0 && dailyAds.sales === 0) {
+      if (dailyAds.spend > maxCPA * 1.5) {
+        return { status: 'pause', message: '⚠️ GASTO ALTO SEM VENDAS: Você já gastou 1.5x o seu CPA máximo sem converter. Reavalie a campanha.' };
+      }
+      return { status: 'warning', message: '⏳ EM TESTE: Aguardando volume de dados para conclusão. Monitore o CTR e Taxa de ATC.' };
+    }
+
+    return { status: 'neutral', message: 'Analise as métricas acima para tomar sua decisão.' };
+  }, [dailyAds.spend, dailyAds.sales, dailyMetrics, currentResult]);
+
+  const scaleResult = useMemo(() => {
+    const scaledData = {
+      ...pricingData,
+      estimatedMonthlySales: pricingData.estimatedMonthlySales * scaleMultiplier,
+      fixedOpCost: pricingData.fixedOpCost * (1 + (scaleMultiplier * 0.1))
     };
-    setDailyHistory(prev => [entry, ...prev.filter(h => h.date !== selectedDate)].sort((a, b) => b.date.localeCompare(a.date)));
-    alert("Dados consolidados com sucesso!");
-  };
+    return calculatePricing(scaledData, pricingData.desiredMarkup, platform);
+  }, [pricingData, platform, scaleMultiplier]);
+
+  const currentSymbol = getCurrencySymbol(pricingData.currency);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,36 +245,48 @@ export default function App() {
     localStorage.removeItem('gerenciie_auth');
   };
 
-  const addProduct = () => {
-    if (!newProduct.name) return;
-    const item: ProductItem = {
+  const saveDailyMetrics = () => {
+    const { spend, revenue, sales, impressions, clicks, atc, ic } = dailyAds;
+    if (spend === 0 && revenue === 0) return;
+
+    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
+    
+    const profit = revenue - (unitVariableCostsNoAds * sales) - spend;
+    const cpa = sales > 0 ? spend / sales : 0;
+    const roas = spend > 0 ? revenue / spend : 0;
+    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+    const cvr = clicks > 0 ? (sales / clicks) * 100 : 0;
+    const cpc = clicks > 0 ? spend / clicks : 0;
+
+    const entry: DailyHistoryEntry = {
       id: Date.now().toString(),
-      name: newProduct.name,
-      image: newProduct.image || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-      status: newProduct.status,
-      addedAt: new Date().toISOString()
+      date: selectedDate,
+      spend,
+      impressions,
+      clicks,
+      atc,
+      ic,
+      sales,
+      revenue,
+      profit,
+      cpa,
+      roas,
+      ctr,
+      atcRate: clicks > 0 ? (atc / clicks) * 100 : 0,
+      cpc,
+      cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+      cvr,
+      status: cpa <= currentResult.maxCPA ? 'good' : cpa <= currentResult.maxCPA * 1.2 ? 'warning' : 'bad',
+      platform
     };
-    const updated = [item, ...products];
-    setProducts(updated);
-    setNewProduct({ name: '', image: '', status: 'Mineração' });
-    localStorage.setItem('gerenciie_products', JSON.stringify(updated));
+
+    setDailyHistory([entry, ...dailyHistory]);
+    setDailyAds({ spend: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0 });
   };
 
-  const updateProductStatus = (id: string, status: ProductStatus) => {
-    const updated = products.map(p => p.id === id ? { ...p, status } : p);
-    setProducts(updated);
-    localStorage.setItem('gerenciie_products', JSON.stringify(updated));
+  const deleteHistoryItem = (id: string) => {
+    setDailyHistory(dailyHistory.filter(item => item.id !== id));
   };
-
-  const deleteProduct = (id: string) => {
-    if(confirm("Remover produto da esteira?")) {
-      const updated = products.filter(p => p.id !== id);
-      setProducts(updated);
-      localStorage.setItem('gerenciie_products', JSON.stringify(updated));
-    }
-  };
-
-  const currentSymbol = getCurrencySymbol(pricingData.currency);
 
   if (!isAuthenticated && !showLogin) {
     return (
@@ -305,9 +316,6 @@ export default function App() {
           <div className="flex flex-col md:flex-row items-center gap-6">
             <button onClick={() => setShowLogin(true)} className="px-12 py-5 bg-blue-600 rounded-full font-black text-sm uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-blue-500/40">
               <Rocket size={18}/> Iniciar Teste Grátis
-            </button>
-            <button className="px-12 py-5 border border-white/10 rounded-full font-black text-sm uppercase tracking-widest hover:bg-white/5 transition-all flex items-center gap-3">
-              <PlayCircle size={18}/> Ver Demonstração
             </button>
           </div>
         </section>
@@ -364,8 +372,6 @@ export default function App() {
           <NavItem icon={<Activity size={18} />} label="Métricas Diárias" active={activeTab === 'daily'} onClick={() => setActiveTab('daily')} />
           <NavItem icon={<ShieldCheck size={18} />} label="Bússola (KPIs)" active={activeTab === 'compass'} onClick={() => setActiveTab('compass')} />
           <NavItem icon={<Zap size={18} />} label="Simulação Escala" active={activeTab === 'simulation'} onClick={() => setActiveTab('simulation')} />
-          <NavItem icon={<Layers3 size={18} />} label="Esteira de Produtos" active={activeTab === 'esteira'} onClick={() => setActiveTab('esteira')} />
-          <NavItem icon={<Crosshair size={18} />} label="Metas" active={activeTab === 'metas'} onClick={() => setActiveTab('metas')} />
           <NavItem icon={<FileText size={18} />} label="DRE" active={activeTab === 'dre'} onClick={() => setActiveTab('dre')} />
           
           <div className="h-px bg-slate-100 my-4" />
@@ -392,6 +398,26 @@ export default function App() {
             <span className="text-xs font-black text-blue-600 uppercase tracking-widest">{platform}</span>
           </div>
           <div className="flex items-center gap-6">
+             <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                <CoinsIcon size={14} className="text-blue-600" />
+                <select 
+                  value={pricingData.currency}
+                  onChange={(e) => setPricingData(prev => ({...prev, currency: e.target.value as CurrencyCode}))}
+                  className="bg-transparent border-none outline-none text-[10px] font-black uppercase cursor-pointer"
+                >
+                  <option value="BRL">BRL (R$)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="JPY">JPY (¥)</option>
+                  <option value="CNY">CNY (¥)</option>
+                  <option value="ARS">ARS ($)</option>
+                  <option value="CLP">CLP ($)</option>
+                  <option value="MXN">MXN ($)</option>
+                  <option value="COP">COP ($)</option>
+                  <option value="PEN">PEN (S/)</option>
+                </select>
+             </div>
              <div className="text-right">
                 <p className="text-[9px] font-black text-slate-600 uppercase">Margem Líquida</p>
                 <p className={`text-sm font-black ${currentResult.marginPercent > 10 ? 'text-emerald-600' : 'text-rose-600'}`}>{currentResult.marginPercent.toFixed(1)}%</p>
@@ -417,45 +443,69 @@ export default function App() {
                   <StatusCard icon={<Target size={20}/>} label="CPA Breakeven" value={formatCurrency(currentResult.maxCPA, pricingData.currency)} desc="Limite p/ não perder" theme="blue" />
                 </div>
 
+                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h3 className="text-lg font-black text-black flex items-center gap-2 italic"><Megaphone size={20} className="text-blue-600"/> Planejamento de Verba Ads</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Quanto investir e quantas vendas buscar</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
+                       <div>
+                         <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Investimento 1 Dia</p>
+                         <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.adSpend1Day, pricingData.currency)}</h4>
+                       </div>
+                       <div className="mt-4 pt-4 border-t border-slate-200">
+                          <p className="text-[10px] font-black text-blue-600 uppercase">Meta de Vendas</p>
+                          <p className="text-lg font-black">{Math.ceil(pricingData.estimatedMonthlySales / 30)} Vendas/dia</p>
+                       </div>
+                    </div>
+                    <div className="p-6 rounded-2xl bg-blue-50 border border-blue-100 flex flex-col justify-between">
+                       <div>
+                         <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Investimento 7 Dias</p>
+                         <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.adSpend7Days, pricingData.currency)}</h4>
+                       </div>
+                       <div className="mt-4 pt-4 border-t border-blue-100">
+                          <p className="text-[10px] font-black text-blue-600 uppercase">Meta de Vendas</p>
+                          <p className="text-lg font-black">{Math.ceil((pricingData.estimatedMonthlySales / 30) * 7)} Vendas/semana</p>
+                       </div>
+                    </div>
+                    <div className="p-6 rounded-2xl bg-black text-white flex flex-col justify-between shadow-xl">
+                       <div>
+                         <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Investimento 30 Dias (Mês)</p>
+                         <h4 className="text-3xl font-black">{formatCurrency(currentResult.adSpend30Days, pricingData.currency)}</h4>
+                       </div>
+                       <div className="mt-4 pt-4 border-t border-white/10">
+                          <p className="text-[10px] font-black text-blue-400 uppercase">Meta de Vendas</p>
+                          <p className="text-lg font-black">{pricingData.estimatedMonthlySales} Vendas/mês</p>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   <div className="lg:col-span-4 space-y-6">
                     <Section title="Produto & Logística" icon={<Package size={16}/>}>
-                      <div className="space-y-1.5">
-                        <label className="text-[8px] font-black text-slate-700 uppercase tracking-widest block">Moeda Venda</label>
-                        <select 
-                          value={pricingData.currency} 
-                          onChange={e => setPricingData(prev => ({...prev, currency: e.target.value as CurrencyCode}))}
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 px-3 font-bold text-xs outline-none focus:border-blue-500/50"
-                        >
-                          <option value="BRL">BRL (Real)</option>
-                          <option value="USD">USD (Dólar)</option>
-                          <option value="EUR">EUR (Euro)</option>
-                        </select>
-                      </div>
-                      <ModernInput label="Custo Produto (Ref)" value={pricingData.costPrice} onChange={v => setPricingData(prev => ({...prev, costPrice: v}))} symbol={currentSymbol} />
+                      <ModernInput label="Custo Produto" value={pricingData.costPrice} onChange={v => setPricingData(prev => ({...prev, costPrice: v}))} symbol={currentSymbol} />
                       <ModernInput label="Frete Fornecedor" value={pricingData.freightIn} onChange={v => setPricingData(prev => ({...prev, freightIn: v}))} symbol={currentSymbol} />
                       <ModernInput label="Markup Alvo" value={pricingData.desiredMarkup} onChange={v => setPricingData(prev => ({...prev, desiredMarkup: v}))} symbol="x" />
+                      <ModernInput label="Estimativa Vendas/Mês" value={pricingData.estimatedMonthlySales} onChange={v => setPricingData(prev => ({...prev, estimatedMonthlySales: v}))} symbol="#" />
                     </Section>
                     
                     <Section title="Canal & Marketing" icon={<Megaphone size={16}/>}>
                       <ModernInput label="Budget Ads (%)" value={pricingData.marketingPercent} onChange={v => setPricingData(prev => ({...prev, marketingPercent: v}))} symbol="%" />
-                      <ModernInput label="Imposto s/ Ads (%)" value={pricingData.adsTaxPercent} onChange={v => setPricingData(prev => ({...prev, adsTaxPercent: v}))} symbol="%" />
-                    </Section>
-
-                    <Section title="Financeiro & Fiscal" icon={<Receipt size={16}/>}>
-                      <div className="grid grid-cols-2 gap-4">
-                        <ModernInput label="Checkout/Shopify (%)" value={pricingData.yampiFeePercent} onChange={v => setPricingData(prev => ({...prev, yampiFeePercent: v}))} symbol="%" />
-                        <ModernInput label="Taxa Cartão (%)" value={pricingData.cardTaxPercent} onChange={v => setPricingData(prev => ({...prev, cardTaxPercent: v}))} symbol="%" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <ModernInput label="Gateway/Finance (%)" value={pricingData.gatewayFee} onChange={v => setPricingData(prev => ({...prev, gatewayFee: v}))} symbol="%" />
-                        <ModernInput label="Imposto Venda (%)" value={pricingData.taxPercent} onChange={v => setPricingData(prev => ({...prev, taxPercent: v}))} symbol="%" />
-                      </div>
+                      {platform !== Platform.DROPSHIPPING && (
+                        <ModernInput label="Comissão Marketplace (%)" value={pricingData.marketplaceCommissionPercent} onChange={v => setPricingData(prev => ({...prev, marketplaceCommissionPercent: v}))} symbol="%" />
+                      )}
+                      {platform !== Platform.DROPSHIPPING && (
+                        <ModernInput label="Taxa Fixa Canal" value={pricingData.fixedFee} onChange={v => setPricingData(prev => ({...prev, fixedFee: v}))} symbol={currentSymbol} />
+                      )}
                     </Section>
                   </div>
                   
                   <div className="lg:col-span-8 bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 h-full">
-                     <h3 className="text-lg font-black text-black mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Performance de Markup</h3>
+                     <h3 className="text-lg font-black text-black mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500"/> Sensibilidade de Margem vs Markup</h3>
                      <div className="h-[400px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={MARKUP_STEPS.map(m => calculatePricing(pricingData, m, platform))}>
@@ -472,240 +522,502 @@ export default function App() {
              </div>
           )}
 
-          {activeTab === 'compass' && (
-             <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                  <div>
-                    <h2 className="text-3xl font-black text-black tracking-tight italic">Bússola de Tráfego</h2>
-                    <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Seus limites operacionais de tráfego pago</p>
+          {activeTab === 'daily' && (
+            <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <h2 className="text-3xl font-black text-black tracking-tight italic">Métricas de Performance</h2>
+                  <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Gestão diária de tráfego e vendas</p>
+                </div>
+                <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                   <Calendar size={16} className="ml-3 text-blue-600" />
+                   <input 
+                    type="date" 
+                    value={selectedDate} 
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border-none outline-none font-bold text-xs p-2 pr-4"
+                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-4 space-y-6">
+                  <Section title="Log de Hoje" icon={<Plus size={16}/>}>
+                    <div className="grid grid-cols-2 gap-4">
+                      <ModernInput label="Investido (Ads)" value={dailyAds.spend} onChange={v => setDailyAds({...dailyAds, spend: v})} symbol={currentSymbol} />
+                      <ModernInput label="Faturamento" value={dailyAds.revenue} onChange={v => setDailyAds({...dailyAds, revenue: v})} symbol={currentSymbol} />
+                      <ModernInput label="Vendas" value={dailyAds.sales} onChange={v => setDailyAds({...dailyAds, sales: v})} symbol="#" />
+                      <ModernInput label="Impressões" value={dailyAds.impressions} onChange={v => setDailyAds({...dailyAds, impressions: v})} symbol="#" />
+                      <ModernInput label="Cliques" value={dailyAds.clicks} onChange={v => setDailyAds({...dailyAds, clicks: v})} symbol="#" />
+                      <ModernInput label="ATC" value={dailyAds.atc} onChange={v => setDailyAds({...dailyAds, atc: v})} symbol="#" />
+                    </div>
+                    <button onClick={saveDailyMetrics} className="w-full blue-gradient text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2">
+                      <Save size={16} /> Salvar Métricas do Dia
+                    </button>
+                  </Section>
+
+                  <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm space-y-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Calculadora Tempo Real</p>
+                      <div className="flex gap-1 bg-slate-50 p-1 rounded-lg">
+                        <button 
+                          onClick={() => setFunnelFilter('all')}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          TUDO
+                        </button>
+                        <button 
+                          onClick={() => setFunnelFilter('top')}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'top' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          TOPO
+                        </button>
+                        <button 
+                          onClick={() => setFunnelFilter('middle')}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'middle' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          MEIO
+                        </button>
+                        <button 
+                          onClick={() => setFunnelFilter('bottom')}
+                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'bottom' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          FUNDO
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                       {(funnelFilter === 'all' || funnelFilter === 'top') && (
+                         <>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">CTR</p>
+                              <p className="text-lg font-black">{dailyMetrics.ctr.toFixed(2)}%</p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">CPC</p>
+                              <p className="text-lg font-black">{formatCurrency(dailyMetrics.cpc, pricingData.currency)}</p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">CPM</p>
+                              <p className="text-lg font-black">{formatCurrency(dailyMetrics.cpm, pricingData.currency)}</p>
+                           </div>
+                         </>
+                       )}
+
+                       {(funnelFilter === 'all' || funnelFilter === 'middle') && (
+                         <>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">Taxa ATC</p>
+                              <p className="text-lg font-black">{dailyMetrics.atcRate.toFixed(2)}%</p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">ATC</p>
+                              <p className="text-lg font-black">{dailyAds.atc}</p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">IC</p>
+                              <p className="text-lg font-black">{dailyAds.ic}</p>
+                           </div>
+                         </>
+                       )}
+
+                       {(funnelFilter === 'all' || funnelFilter === 'bottom') && (
+                         <>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">ROAS</p>
+                              <p className="text-lg font-black">{dailyMetrics.roas.toFixed(2)}</p>
+                           </div>
+                           <div className={`p-3 rounded-xl ${ (dailyMetrics.cpa > currentResult.maxCPA) ? 'bg-rose-50' : 'bg-emerald-50' }`}>
+                              <p className="text-[8px] font-black text-slate-500 uppercase">CPA</p>
+                              <p className={`text-lg font-black ${ (dailyMetrics.cpa > currentResult.maxCPA) ? 'text-rose-600' : 'text-emerald-600' }`}>
+                                {formatCurrency(dailyMetrics.cpa, pricingData.currency)}
+                              </p>
+                           </div>
+                           <div className="p-3 bg-slate-50 rounded-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase">CVR</p>
+                              <p className="text-lg font-black">{dailyMetrics.cvr.toFixed(2)}%</p>
+                           </div>
+                         </>
+                       )}
+                       
+                       {funnelFilter === 'all' && (
+                         <div className={`p-3 rounded-xl col-span-full ${ dailyMetrics.profit >= 0 ? 'bg-emerald-50' : 'bg-rose-50' }`}>
+                            <p className="text-[8px] font-black text-slate-500 uppercase">Lucro Est. (Dia)</p>
+                            <p className={`text-xl font-black ${ dailyMetrics.profit >= 0 ? 'text-emerald-600' : 'text-rose-600' }`}>
+                              {formatCurrency(dailyMetrics.profit, pricingData.currency)}
+                            </p>
+                         </div>
+                       )}
+                    </div>
+
+                    <div className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
+                      scaleOrientation.status === 'scale' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
+                      scaleOrientation.status === 'pause' ? 'bg-rose-50 border-rose-100 text-rose-800' :
+                      scaleOrientation.status === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800' :
+                      'bg-slate-50 border-slate-100 text-slate-600'
+                    }`}>
+                      <div className="mt-0.5">
+                        {scaleOrientation.status === 'scale' && <TrendingUp size={16} />}
+                        {scaleOrientation.status === 'pause' && <AlertTriangle size={16} />}
+                        {scaleOrientation.status === 'warning' && <Info size={16} />}
+                        {scaleOrientation.status === 'maintain' && <CheckCircle2 size={16} />}
+                        {scaleOrientation.status === 'neutral' && <MousePointer2 size={16} />}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest mb-1">Orientação de Escala</p>
+                        <p className="text-xs font-bold leading-relaxed">{scaleOrientation.message}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  <Section title="Limites de Aquisição (CPA)" icon={<Target size={16}/>}>
-                    <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 mb-4">
-                       <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">CPA Breakeven (Máximo)</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.maxCPA, pricingData.currency)}</h4>
-                       <p className="text-[9px] font-bold text-rose-500 mt-2">Se gastar mais que isso por venda, você perde dinheiro.</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
-                       <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">CPA Ideal (Escala)</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.cpaIdeal, pricingData.currency)}</h4>
-                       <p className="text-[9px] font-bold text-emerald-500 mt-2">Margem líquida atual está em {currentResult.marginPercent.toFixed(1)}%.</p>
-                    </div>
-                  </Section>
+                <div className="lg:col-span-8">
+                   <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+                      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                         <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                           <History size={16} className="text-blue-500"/> Histórico Recente
+                         </h3>
+                         <button className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
+                           <Download size={12}/> Exportar CSV
+                         </button>
+                      </div>
+                      <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-100">
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Data</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Gasto</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Receita</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">ROAS</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">CPA</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Lucro Est.</th>
+                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dailyHistory.map((item) => (
+                              <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
+                                <td className="px-6 py-4 text-xs font-bold text-slate-800">{new Date(item.date).toLocaleDateString('pt-BR')}</td>
+                                <td className="px-6 py-4 text-xs font-bold">{formatCurrency(item.spend, pricingData.currency)}</td>
+                                <td className="px-6 py-4 text-xs font-bold">{formatCurrency(item.revenue, pricingData.currency)}</td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${item.roas > 2 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                    {item.roas.toFixed(2)}x
+                                  </span>
+                                </td>
+                                <td className={`px-6 py-4 text-xs font-bold ${item.status === 'bad' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  {formatCurrency(item.cpa, pricingData.currency)}
+                                </td>
+                                <td className={`px-6 py-4 text-xs font-bold ${item.profit > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {formatCurrency(item.profit, pricingData.currency)}
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  <button onClick={() => deleteHistoryItem(item.id)} className="p-2 text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all">
+                                    <Trash2 size={14}/>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {dailyHistory.length === 0 && (
+                              <tr>
+                                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic text-sm font-bold">Nenhum dado registrado para este produto.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-                  <Section title="Topo de Funil (ATC)" icon={<ShoppingCart size={16}/>}>
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 mb-4">
-                       <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">ATC Máximo</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.atcMax, pricingData.currency)}</h4>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
-                       <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">ATC Ideal</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.atcIdeal, pricingData.currency)}</h4>
-                    </div>
-                  </Section>
+          {activeTab === 'simulation' && (
+            <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom duration-500 pb-32">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div>
+                  <h2 className="text-3xl font-black text-black tracking-tight italic">Simulação de Escala</h2>
+                  <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Projete o futuro da sua operação</p>
+                </div>
+                <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                  <span className="text-[10px] font-black text-slate-500 uppercase px-3">Multiplicador</span>
+                  <div className="flex gap-1">
+                    {[2, 3, 5, 10].map(m => (
+                      <button 
+                        key={m}
+                        onClick={() => setScaleMultiplier(m)}
+                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${scaleMultiplier === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        {m}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-                  <Section title="Meio de Funil (IC)" icon={<CreditCard size={16}/>}>
-                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 mb-4">
-                       <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">IC Máximo</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.icMax, pricingData.currency)}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="md:col-span-1 space-y-6">
+                  <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100">
+                    <h3 className="text-sm font-black text-black mb-6 uppercase tracking-widest flex items-center gap-2">
+                      <Settings size={18} className="text-blue-500"/> Parâmetros
+                    </h3>
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-600 uppercase mb-2">Vendas Mensais Projetadas</label>
+                        <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 focus-within:border-blue-500/50 transition-all">
+                          <input 
+                            type="number"
+                            value={Math.ceil(pricingData.estimatedMonthlySales * scaleMultiplier)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (val > 0 && pricingData.estimatedMonthlySales > 0) {
+                                setScaleMultiplier(val / pricingData.estimatedMonthlySales);
+                              }
+                            }}
+                            className="text-2xl font-black text-blue-600 bg-transparent border-none outline-none w-full"
+                          />
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest shrink-0">unidades</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="1.1" 
+                          max="20" 
+                          step="0.1"
+                          value={scaleMultiplier} 
+                          onChange={(e) => setScaleMultiplier(parseFloat(e.target.value))}
+                          className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer mt-4 accent-blue-600"
+                        />
+                      </div>
                     </div>
-                    <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
-                       <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">IC Ideal</p>
-                       <h4 className="text-3xl font-black text-black">{formatCurrency(currentResult.icIdeal, pricingData.currency)}</h4>
-                    </div>
-                  </Section>
+                  </div>
                 </div>
 
-                <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
-                  <h3 className="text-xl font-black text-black mb-8 italic flex items-center gap-3"><Scale size={24} className="text-blue-600"/> Por que seguir a Bússola?</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <div className="space-y-4">
-                      <div className="flex gap-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">01</div>
-                        <p className="text-sm text-slate-700 font-medium leading-relaxed">A Bússola calcula seus limites baseados nos <span className="font-bold text-black">custos reais</span> da sua operação, incluindo taxas de gateway, impostos e custos fixos.</p>
+                <div className="md:col-span-2 space-y-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100">
+                      <p className="text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Lucro Mensal Projetado</p>
+                      <h4 className={`text-4xl font-black tracking-tighter ${scaleResult.monthlyProfitProjection > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {formatCurrency(scaleResult.monthlyProfitProjection, pricingData.currency)}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-bold mt-2 italic">
+                        Vs {formatCurrency(currentResult.monthlyProfitProjection, pricingData.currency)} (Atual)
+                      </p>
+                    </div>
+                    <div className="bg-black rounded-[32px] p-8 shadow-xl text-white">
+                      <p className="text-[10px] font-black text-blue-400 uppercase mb-2 tracking-widest">Faturamento Mensal</p>
+                      <h4 className="text-4xl font-black tracking-tighter">
+                        {formatCurrency(scaleResult.monthlyRevenue, pricingData.currency)}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100">
+                    <h3 className="text-sm font-black text-black mb-8 uppercase tracking-widest flex items-center gap-2">
+                      <BarChart size={18} className="text-blue-500"/> Comparativo
+                    </h3>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ReBarChart
+                          data={[
+                            { name: 'Atual', revenue: currentResult.monthlyRevenue, profit: currentResult.monthlyProfitProjection },
+                            { name: 'Escala', revenue: scaleResult.monthlyRevenue, profit: scaleResult.monthlyProfitProjection }
+                          ]}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="name" tick={{fontSize: 12, fontWeight: 'bold', fill: '#000'}} axisLine={false} />
+                          <YAxis tickFormatter={v => `R$ ${v/1000}k`} tick={{fontSize: 10, fontWeight: 'bold', fill: '#000'}} axisLine={false} />
+                          <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                          <Bar dataKey="revenue" name="Faturamento" fill="#dbeafe" radius={[10, 10, 0, 0]} />
+                          <Bar dataKey="profit" name="Lucro" fill="#2563eb" radius={[10, 10, 0, 0]} />
+                        </ReBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'compass' && (
+             <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-4xl font-black text-black tracking-tight italic text-shadow-sm">Bússola de Tráfego</h2>
+                  <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.1em]">SEUS LIMITES OPERACIONAIS DE TRÁFEGO PAGO</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {/* LIMITES DE AQUISIÇÃO (CPA) */}
+                  <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 flex flex-col gap-8">
+                    <div className="flex items-center gap-3 text-black">
+                      <Target size={20} />
+                      <h3 className="text-xs font-black uppercase tracking-widest">LIMITES DE AQUISIÇÃO (CPA)</h3>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="bg-rose-50 rounded-[24px] p-6 border border-rose-100">
+                        <p className="text-[10px] font-black text-rose-600 uppercase mb-2 tracking-widest">CPA BREAKEVEN (MÁXIMO)</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.maxCPA, pricingData.currency)}</h4>
+                        <p className="text-[9px] text-rose-500 font-bold mt-2">Se gastar mais que isso por venda, você perde dinheiro.</p>
                       </div>
-                      <div className="flex gap-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">02</div>
-                        <p className="text-sm text-slate-700 font-medium leading-relaxed">O <span className="font-bold text-black">CPA de Equilíbrio</span> é o "fio da navalha". Passou dele, sua operação é uma caridade para o Facebook/Google.</p>
+
+                      <div className="bg-emerald-50 rounded-[24px] p-6 border border-emerald-100">
+                        <p className="text-[10px] font-black text-emerald-600 uppercase mb-2 tracking-widest">CPA IDEAL (ESCALA)</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.cpaIdeal, pricingData.currency)}</h4>
+                        <p className="text-[9px] text-emerald-500 font-bold mt-2">Margem líquida atual está em {currentResult.marginPercent.toFixed(1)}%.</p>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div className="flex gap-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">03</div>
-                        <p className="text-sm text-slate-700 font-medium leading-relaxed">Os benchmarks de <span className="font-bold text-black">ATC e IC</span> ajudam você a identificar onde o funil está quebrando antes mesmo de queimar todo o budget.</p>
+                  </div>
+
+                  {/* TOPO DE FUNIL (ATC) */}
+                  <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 flex flex-col gap-8">
+                    <div className="flex items-center gap-3 text-black">
+                      <ShoppingCart size={20} />
+                      <h3 className="text-xs font-black uppercase tracking-widest">TOPO DE FUNIL (ATC)</h3>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="bg-slate-50 rounded-[24px] p-6 border border-slate-100">
+                        <p className="text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">ATC MÁXIMO</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.atcMax, pricingData.currency)}</h4>
                       </div>
-                      <div className="flex gap-4">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">04</div>
-                        <p className="text-sm text-slate-700 font-medium leading-relaxed">Use o <span className="font-bold text-black">CPA Ideal</span> para escalar com segurança, garantindo que o lucro no bolso compense o risco da operação.</p>
+
+                      <div className="bg-blue-50 rounded-[24px] p-6 border border-blue-100">
+                        <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest">ATC IDEAL</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.atcIdeal, pricingData.currency)}</h4>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* MEIO DE FUNIL (IC) */}
+                  <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 flex flex-col gap-8">
+                    <div className="flex items-center gap-3 text-black">
+                      <CardIcon size={20} />
+                      <h3 className="text-xs font-black uppercase tracking-widest">MEIO DE FUNIL (IC)</h3>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="bg-slate-50 rounded-[24px] p-6 border border-slate-100">
+                        <p className="text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">IC MÁXIMO</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.icMax, pricingData.currency)}</h4>
+                      </div>
+
+                      <div className="bg-blue-50 rounded-[24px] p-6 border border-blue-100">
+                        <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest">IC IDEAL</p>
+                        <h4 className="text-3xl font-black text-black tracking-tighter">{formatCurrency(currentResult.icIdeal, pricingData.currency)}</h4>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Por que seguir a Bússola? Section */}
+                <div className="bg-white rounded-[40px] p-12 shadow-sm border border-slate-100">
+                  <div className="flex items-center gap-4 mb-10">
+                    <Scale size={28} className="text-blue-600" />
+                    <h3 className="text-2xl font-black italic">Por que seguir a Bússola?</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="flex items-start gap-4">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">01</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        A Bússola calcula seus limites baseados nos <span className="font-black text-black">custos reais</span> da sua operação, incluindo taxas de gateway, impostos e custos fixos.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">03</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        Os benchmarks de <span className="font-black text-black">ATC e IC</span> ajudam você a identificar onde o funil está quebrando antes mesmo de queimar todo o budget.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">02</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        O <span className="font-black text-black">CPA de Equilíbrio</span> é o "fio da navalha". Passou dele, sua operação é uma caridade para o Facebook/Google.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs shrink-0">04</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        Use o <span className="font-black text-black">CPA Ideal</span> para escalar com segurança, garantindo que o lucro no bolso compense o risco da operação.
+                      </p>
                     </div>
                   </div>
                 </div>
              </div>
           )}
 
-          {activeTab === 'simulation' && (
-            <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
-                  <h2 className="text-3xl font-black text-black tracking-tight italic">Simulação de Escala</h2>
-                  <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Projeções Financeiras & Benchmarks Ads</p>
-                </div>
-                
-                <div className="flex flex-col items-end gap-4">
-                   {/* Period Selector Tabs */}
-                   <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
-                      {[1, 7, 30].map(p => (
-                        <button 
-                          key={p} 
-                          onClick={() => setSimPeriod(p as any)}
-                          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${simPeriod === p ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                        >
-                          {p === 1 ? '1 Dia' : `${p} Dias`}
-                        </button>
-                      ))}
-                   </div>
-
-                   <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex items-center gap-6">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest">Investimento Diário em Ads</p>
-                      <div className="flex items-center gap-2">
-                         <span className="font-black text-slate-400">{currentSymbol}</span>
-                         <input 
-                           type="number" 
-                           value={simBudget} 
-                           onChange={e => setSimBudget(parseFloat(e.target.value) || 0)} 
-                           className="bg-transparent font-black text-3xl outline-none w-32 focus:text-blue-600 transition-colors"
-                         />
-                      </div>
-                    </div>
-                    <div className="h-10 w-px bg-slate-100" />
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1 tracking-widest">Preço de Venda</p>
-                      <p className="font-black text-xl">{formatCurrency(currentResult.finalPrice, pricingData.currency)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {simulationResults.map((sim, idx) => (
-                  <div key={idx} className={`bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group hover:shadow-xl transition-all ${sim.name === 'Melhor Cenário' ? 'border-emerald-200 ring-4 ring-emerald-50' : sim.name === 'Pior Cenário' ? 'border-rose-200' : ''}`}>
-                    {sim.name === 'Melhor Cenário' && <div className="absolute top-0 right-0 px-4 py-1.5 bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest rounded-bl-2xl">Escala Ideal</div>}
-                    <div className="flex justify-between items-start mb-6">
-                      <h3 className="text-xl font-black text-black italic">{sim.name}</h3>
-                      <div className={`px-4 py-1.5 rounded-full text-[10px] font-black ${sim.profit > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {sim.profit > 0 ? 'Lucrativo' : 'Prejuízo'}
-                      </div>
-                    </div>
-
-                    {/* Lucro em Destaque */}
-                    <div className={`p-6 rounded-[24px] mb-8 ${sim.profit > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                      <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-70">Lucro Projetado ({simPeriod}d)</p>
-                      <p className="text-3xl font-black tracking-tighter">{formatCurrency(sim.profit, pricingData.currency)}</p>
-                      <p className="text-[9px] font-bold mt-1">ROI Final: {sim.roi.toFixed(1)}%</p>
-                    </div>
-
-                    <div className="space-y-8">
-                      {/* Métricas de Negócio */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-4">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-700">Métricas de Negócio</h4>
-                        </div>
-                        <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                           <SimRow label="Receita Bruta" value={formatCurrency(sim.revenue, pricingData.currency)} />
-                           <SimRow label="Unidades Vendidas" value={`${sim.sales} un`} />
-                           <SimRow label="CPA Médio" value={formatCurrency(sim.cpa, pricingData.currency)} />
-                           <SimRow label="ROAS" value={`${sim.roas.toFixed(2)}x`} />
-                        </div>
-                      </div>
-
-                      {/* Métricas Facebook Ads */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-4">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-700">Facebook Ads Benchmarks</h4>
-                        </div>
-                        <div className="grid grid-cols-2 gap-y-4 gap-x-6">
-                           <SimRow label="Impressões" value={new Intl.NumberFormat('pt-BR').format(Math.floor(sim.impressions))} />
-                           <SimRow label="Cliques" value={new Intl.NumberFormat('pt-BR').format(Math.floor(sim.clicks))} />
-                           <SimRow label="CPM" value={formatCurrency(sim.cpm, pricingData.currency)} />
-                           <SimRow label="CTR" value={`${sim.ctr.toFixed(2)}%`} />
-                           <SimRow label="CPC" value={formatCurrency(sim.cpc, pricingData.currency)} />
-                           <SimRow label="CVR" value={`${sim.cvr.toFixed(2)}%`} />
-                           <SimRow label="ATC (Carrinhos)" value={new Intl.NumberFormat('pt-BR').format(sim.atc)} />
-                           <SimRow label="IC (Checkouts)" value={new Intl.NumberFormat('pt-BR').format(sim.ic)} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                  <h3 className="text-xl font-black text-black italic flex items-center gap-3"><BarChart4 size={24} className="text-blue-600"/> Comparativo Faturamento vs Lucro ({simPeriod} Dias)</h3>
-                  <div className="flex items-center gap-4">
-                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-200"></div><span className="text-[10px] font-black text-slate-500 uppercase">Receita</span></div>
-                     <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-600"></div><span className="text-[10px] font-black text-slate-500 uppercase">Lucro</span></div>
-                  </div>
-                </div>
-                <div className="h-[350px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ReBarChart data={simulationResults} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" tick={{fontSize: 11, fontWeight: 'bold', fill: '#64748b'}} axisLine={false} />
-                      <YAxis tickFormatter={v => formatCurrency(v, pricingData.currency)} tick={{fontSize: 9, fontWeight: 'bold', fill: '#64748b'}} axisLine={false} />
-                      <Tooltip 
-                        contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px rgba(0,0,0,0.05)'}} 
-                        formatter={(value: any, name: any) => [formatCurrency(value, pricingData.currency), name === 'profit' ? 'Lucro' : 'Receita']}
-                      />
-                      <Bar dataKey="revenue" name="Receita" fill="#e2e8f0" radius={[8, 8, 0, 0]} barSize={40} />
-                      <Bar dataKey="profit" name="Lucro" radius={[8, 8, 0, 0]} barSize={40}>
-                        {simulationResults.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Bar>
-                    </ReBarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          )}
-
           {activeTab === 'dre' && (
-             <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom duration-500 pb-32">
-                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
-                   <div className="bg-black p-10 text-white flex justify-between items-center">
-                      <h2 className="text-2xl font-black italic tracking-tighter">Demonstrativo de Resultados (DRE)</h2>
-                      <FileText size={32} className="text-blue-500 opacity-50" />
+             <div className="max-w-5xl mx-auto animate-in fade-in duration-500 pb-32">
+                <div className="bg-white rounded-[40px] shadow-2xl border border-slate-100 overflow-hidden">
+                   {/* HEADER DO DRE (PRETO) */}
+                   <div className="bg-black p-12 text-white flex justify-between items-center">
+                      <h2 className="text-4xl font-black italic tracking-tighter">Demonstrativo de Resultados (DRE)</h2>
+                      <FileText size={42} className="text-blue-500 opacity-80" />
                    </div>
 
-                   <div className="p-10 space-y-2">
-                      <DRERow label="(+) Receita Bruta Total" value={currentResult.monthlyRevenue} currency={pricingData.currency} isMain />
+                   {/* CORPO DO DRE */}
+                   <div className="p-12 space-y-2">
+                      <DRERow 
+                        label="(+) Receita Bruta Total" 
+                        value={currentResult.monthlyRevenue} 
+                        currency={pricingData.currency} 
+                        isBold 
+                      />
+                      
                       <div className="h-4" />
-                      <DRERow label="(-) Custo de Mercadoria (CMV)" value={currentResult.unitCMV * pricingData.estimatedMonthlySales} currency={pricingData.currency} isNegative />
-                      <DRERow label="(-) Embalagem e Logística" value={(pricingData.packagingCost + pricingData.shippingLabel) * pricingData.estimatedMonthlySales} currency={pricingData.currency} isNegative />
-                      <div className="h-px bg-slate-100 my-4" />
-                      <DRERow label="(=) Margem de Contribuição I" value={currentResult.monthlyRevenue - (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel) * pricingData.estimatedMonthlySales} currency={pricingData.currency} isBold />
+                      
+                      <DRERow 
+                        label="(-) Custo de Mercadoria (CMV)" 
+                        value={currentResult.unitCMV * pricingData.estimatedMonthlySales} 
+                        currency={pricingData.currency} 
+                        isNegative 
+                      />
+                      
+                      <DRERow 
+                        label="(-) Embalagem e Logística" 
+                        value={(pricingData.packagingCost + pricingData.shippingLabel) * pricingData.estimatedMonthlySales} 
+                        currency={pricingData.currency} 
+                        isNegative 
+                      />
+                      
+                      <div className="h-px bg-slate-100 my-6" />
+                      
+                      <DRERow 
+                        label="(=) Margem de Contribuição I" 
+                        value={currentResult.monthlyRevenue - (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel) * pricingData.estimatedMonthlySales} 
+                        currency={pricingData.currency} 
+                        isBold 
+                      />
+                      
                       <div className="h-4" />
-                      <DRERow label="(-) Investimento em Tráfego (Ads)" value={currentResult.marketingCost * pricingData.estimatedMonthlySales} currency={pricingData.currency} isNegative />
-                      <DRERow label="(-) Impostos e Taxas" value={currentResult.totalFeesOnly * pricingData.estimatedMonthlySales} currency={pricingData.currency} isNegative />
-                      <div className="h-px bg-slate-100 my-4" />
-                      <div className="h-4" />
-                      <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex justify-between items-center">
+                      
+                      <DRERow 
+                        label="(-) Investimento em Tráfego (Ads)" 
+                        value={currentResult.adSpend30Days} 
+                        currency={pricingData.currency} 
+                        isNegative 
+                      />
+                      
+                      <DRERow 
+                        label="(-) Impostos e Taxas" 
+                        value={(currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax) * pricingData.estimatedMonthlySales} 
+                        currency={pricingData.currency} 
+                        isNegative 
+                      />
+                      
+                      <div className="h-10" />
+
+                      {/* CARD DE RESUMO INFERIOR */}
+                      <div className="bg-[#F8FAFC] p-10 rounded-[40px] border border-slate-100 flex justify-between items-center shadow-inner">
                          <div>
-                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Lucro Líquido Final</p>
-                            <h3 className={`text-4xl font-black tracking-tighter ${currentResult.monthlyProfitProjection > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">LUCRO LÍQUIDO FINAL</p>
+                            <h3 className="text-6xl font-black tracking-tighter text-[#10B981]">
                                {formatCurrency(currentResult.monthlyProfitProjection, pricingData.currency)}
                             </h3>
                          </div>
                          <div className="text-right">
-                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Margem Líquida</p>
-                            <p className="text-2xl font-black text-black">{currentResult.marginPercent.toFixed(1)}%</p>
+                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">MARGEM LÍQUIDA</p>
+                            <p className="text-5xl font-black text-black">{currentResult.marginPercent.toFixed(1)}%</p>
                          </div>
                       </div>
                    </div>
@@ -713,145 +1025,6 @@ export default function App() {
              </div>
           )}
 
-          {activeTab === 'daily' && (
-            <div className="max-w-7xl mx-auto space-y-10 animate-in slide-in-from-bottom duration-700 pb-32">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                 <div>
-                    <h2 className="text-3xl font-black text-black tracking-tight italic">Centro de Performance Consolidada</h2>
-                    <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Consolide seus gastos e valide sua escala</p>
-                 </div>
-               </div>
-               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                 <div className="lg:col-span-8 bg-white rounded-[40px] p-10 shadow-sm border border-slate-100">
-                    <div className="mb-10">
-                       <label className="text-[10px] font-black text-slate-700 uppercase block px-1 mb-2">Data de Referência</label>
-                       <input 
-                         type="date" 
-                         value={selectedDate} 
-                         onChange={e => setSelectedDate(e.target.value)} 
-                         className="bg-slate-50 border border-slate-100 rounded-2xl py-3 px-4 font-bold text-sm outline-none focus:border-blue-500/50" 
-                       />
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
-                       <ModernInput label="Gasto Total Ads" value={dailyAds.spend} onChange={v => setDailyAds(prev => ({...prev, spend: v}))} symbol={currentSymbol} />
-                       <ModernInput label="Vendas (Un)" value={dailyAds.sales} onChange={v => setDailyAds(prev => ({...prev, sales: v}))} symbol="#" />
-                       <ModernInput label="Faturamento Real" value={dailyAds.manualRevenue} onChange={v => setDailyAds(prev => ({...prev, manualRevenue: v}))} symbol={currentSymbol} />
-                       <ModernInput label="Impressões" value={dailyAds.impressions} onChange={v => setDailyAds(prev => ({...prev, impressions: v}))} symbol="#" />
-                       <ModernInput label="Cliques (Site)" value={dailyAds.clicks} onChange={v => setDailyAds(prev => ({...prev, clicks: v}))} symbol="#" />
-                       <ModernInput label="Carrinhos (ATC)" value={dailyAds.atc} onChange={v => setDailyAds(prev => ({...prev, atc: v}))} symbol="#" />
-                       <ModernInput label="Checkout (IC)" value={dailyAds.ic} onChange={v => setDailyAds(prev => ({...prev, ic: v}))} symbol="#" />
-                    </div>
-                    <button onClick={saveDailyMetrics} className="w-full bg-black text-white py-5 rounded-[24px] font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3">
-                      <Save size={18}/> Salvar Resultados
-                    </button>
-                 </div>
-                 <div className="lg:col-span-4 bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col">
-                    <h3 className="text-xs font-black text-slate-600 uppercase tracking-widest mb-6">Lucratividade (15d)</h3>
-                    <div className="flex-1 min-h-[200px]">
-                       <ResponsiveContainer width="100%" height="100%">
-                         <AreaChart data={[...dailyHistory].reverse().slice(-15)}>
-                           <Area type="monotone" dataKey="profit" stroke="#3b82f6" fill="#dbeafe" strokeWidth={3} />
-                         </AreaChart>
-                       </ResponsiveContainer>
-                    </div>
-                 </div>
-               </div>
-               <div className="grid grid-cols-2 md:grid-cols-6 gap-6">
-                  <MiniMetricCard label="CPA Real" value={formatCurrency(dailyStats.realCPA, pricingData.currency)} bad={!dailyStats.isCPAGood && dailyAds.spend > 0} icon={<Target size={14}/>} />
-                  <MiniMetricCard label="ROAS" value={`${dailyStats.realROAS.toFixed(2)}x`} bad={!dailyStats.isROASGood && dailyAds.spend > 0} icon={<TrendingUp size={14}/>} />
-                  <MiniMetricCard label="CPC" value={formatCurrency(dailyStats.cpc, pricingData.currency)} icon={<MousePointerClick size={14}/>} />
-                  <MiniMetricCard label="CPM" value={formatCurrency(dailyStats.cpm, pricingData.currency)} icon={<Eye size={14}/>} />
-                  <MiniMetricCard label="ATC %" value={`${dailyStats.atcRate.toFixed(1)}%`} icon={<ShoppingCart size={14}/>} />
-                  <MiniMetricCard label="CVR %" value={`${dailyStats.cvr.toFixed(1)}%`} icon={<ShoppingBag size={14}/>} />
-               </div>
-            </div>
-          )}
-
-          {activeTab === 'esteira' && (
-            <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
-              <div>
-                <h2 className="text-3xl font-black text-black tracking-tight italic">Esteira de Operação</h2>
-                <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Gerencie seu fluxo de mineração e escala</p>
-              </div>
-
-              <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 border-l-4 border-l-blue-600">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase block px-1">Nome do Produto</label>
-                    <input type="text" placeholder="Ex: Smartwatch Ultra..." value={newProduct.name} onChange={e => setNewProduct(prev => ({...prev, name: e.target.value}))} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-sm outline-none focus:border-blue-500/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase block px-1">URL da Imagem</label>
-                    <input type="text" placeholder="https://..." value={newProduct.image} onChange={e => setNewProduct(prev => ({...prev, image: e.target.value}))} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-sm outline-none focus:border-blue-500/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-700 uppercase block px-1">Status Inicial</label>
-                    <select value={newProduct.status} onChange={e => setNewProduct(prev => ({...prev, status: e.target.value as ProductStatus}))} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-sm outline-none focus:border-blue-500/50 appearance-none">
-                      <option>Mineração</option>
-                      <option>Teste</option>
-                      <option>Validação</option>
-                      <option>Escala</option>
-                    </select>
-                  </div>
-                  <button onClick={addProduct} disabled={!newProduct.name} className="h-[52px] px-10 rounded-2xl font-black text-xs uppercase tracking-widest blue-gradient text-white hover:scale-[1.02] transition-all shadow-lg shadow-blue-500/20">
-                    Minerar!
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                {(['Mineração', 'Teste', 'Validação', 'Escala'] as ProductStatus[]).map(status => (
-                  <div key={status} className="space-y-4">
-                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 pl-2 border-l-2 border-slate-200">{status}</h3>
-                    <div className="space-y-4 min-h-[100px]">
-                      {products.filter(p => p.status === status).map(product => (
-                        <div key={product.id} className="bg-white rounded-[32px] p-4 shadow-sm border border-slate-200 group relative">
-                          <button onClick={() => deleteProduct(product.id)} className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all">
-                             <Trash2 size={16}/>
-                          </button>
-                          <div className="aspect-square w-full rounded-2xl overflow-hidden mb-4 bg-slate-100">
-                             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                          </div>
-                          <h4 className="font-extrabold text-black text-sm mb-4 truncate pr-6">{product.name}</h4>
-                          <div className="relative">
-                            <select value={product.status} onChange={(e) => updateProductStatus(product.id, e.target.value as ProductStatus)} className="w-full text-[10px] font-black uppercase text-slate-700 bg-slate-50 px-3 py-2.5 rounded-xl border-none appearance-none">
-                              <option>Mineração</option>
-                              <option>Teste</option>
-                              <option>Validação</option>
-                              <option>Escala</option>
-                              <option>Descontinuado</option>
-                            </select>
-                            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'metas' && (
-             <div className="animate-in slide-in-from-bottom duration-500 max-w-5xl mx-auto space-y-10 pb-20 pt-10">
-                <div className="bg-black text-white rounded-[40px] p-10 flex items-center justify-between shadow-xl">
-                   <div>
-                      <h3 className="text-3xl font-black tracking-tighter uppercase italic">Escalômetro</h3>
-                      <p className="text-xs font-bold text-slate-300">Objetivo de lucro mensal</p>
-                   </div>
-                   <div className="bg-slate-900 rounded-3xl p-6 text-right border border-white/10">
-                      <p className="text-[10px] font-black text-blue-400 uppercase mb-1">Lucro Alvo ({currentSymbol})</p>
-                      <input type="number" value={targetProfit} onChange={e => setTargetProfit(parseFloat(e.target.value) || 0)} className="bg-transparent outline-none font-black text-4xl w-44 text-right text-white" />
-                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                   <GoalMini label="Faturamento" value={formatCurrency(goalCalculations.revenueGoal, pricingData.currency)} color="blue" icon={<Coins size={16}/>} />
-                   <GoalMini label="Vendas/Mês" value={`${goalCalculations.unitsNeeded} un`} color="green" icon={<Package size={16}/>} />
-                   <GoalMini label="Vendas/Dia" value={`${goalCalculations.salesPerDay} un`} color="green" icon={<Zap size={16}/>} />
-                   <GoalMini label="ROAS" value={`${(goalCalculations.targetROAS || 0).toFixed(2)}x`} color="blue" icon={<TrendingUp size={16}/>} />
-                </div>
-             </div>
-          )}
         </div>
       </main>
     </div>
@@ -921,44 +1094,13 @@ function StatusCard({ icon, label, value, desc, theme }: any) {
   );
 }
 
-function MiniMetricCard({ label, value, bad, icon }: any) {
+function DRERow({ label, value, currency, isNegative, isBold }: { label: string, value: number, currency: CurrencyCode, isNegative?: boolean, isBold?: boolean }) {
   return (
-    <div className={`bg-white rounded-2xl p-4 border shadow-sm transition-all ${bad ? 'border-rose-200 bg-rose-50' : 'border-slate-100'}`}>
-       <div className="flex items-center gap-2 mb-2 text-slate-600">
-          {icon}
-          <p className="text-[8px] font-black uppercase tracking-widest">{label}</p>
-       </div>
-       <p className={`text-sm font-black tracking-tight ${bad ? 'text-rose-600' : 'text-black'}`}>{value}</p>
-    </div>
-  );
-}
-
-function GoalMini({ label, value, color, icon }: any) {
-  const colors: any = { green: "bg-emerald-50 text-emerald-700 border-emerald-100", blue: "bg-blue-600 text-white border-blue-500" };
-  return (
-    <div className={`p-6 rounded-[28px] border shadow-sm flex flex-col justify-center ${colors[color]}`}>
-       <div className="flex items-center gap-2 mb-2 opacity-90">{icon}<p className="text-[9px] font-black uppercase tracking-widest">{label}</p></div>
-       <h4 className="text-2xl font-black tracking-tight italic">{value}</h4>
-    </div>
-  );
-}
-
-function DRERow({ label, value, currency, isNegative, isBold, isMain }: { label: string, value: number, currency: CurrencyCode, isNegative?: boolean, isBold?: boolean, isMain?: boolean }) {
-  return (
-    <div className={`flex justify-between items-center py-2 ${isMain ? 'text-lg font-black text-black' : isBold ? 'font-black text-black' : 'text-sm font-bold text-slate-700'}`}>
+    <div className={`flex justify-between items-center py-2.5 ${isBold ? 'text-2xl font-black text-black' : 'text-xl font-bold text-slate-800'}`}>
        <span>{label}</span>
-       <span className={isNegative ? 'text-rose-600' : ''}>
+       <span className={isNegative ? 'text-[#EF4444]' : ''}>
          {isNegative ? '-' : ''}{formatCurrency(value, currency)}
        </span>
-    </div>
-  );
-}
-
-function SimRow({ label, value }: { label: string, value: string }) {
-  return (
-    <div className="flex flex-col">
-       <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{label}</span>
-       <span className="text-xs font-black text-black">{value}</span>
     </div>
   );
 }
