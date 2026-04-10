@@ -363,7 +363,6 @@ export default function App() {
           </div>
           <div>
             <h1 className="font-extrabold text-xl tracking-tighter text-black leading-none">Gerenciie</h1>
-            <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">PRO v4.0</p>
           </div>
         </div>
 
