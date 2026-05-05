@@ -24,62 +24,182 @@ import { calculatePricing, formatCurrency, getCurrencySymbol } from './utils/cal
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, BarChart as ReBarChart, Bar, Cell
 } from 'recharts';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  query, 
+  where, 
+  onSnapshot, 
+  deleteDoc, 
+  addDoc, 
+  serverTimestamp,
+  orderBy,
+  getDocFromServer
+} from 'firebase/firestore';
+import { auth, db } from './src/lib/firebase.ts';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 const MARKUP_STEPS = [1.2, 1.5, 1.8, 2.0, 2.2, 2.5, 2.8, 3.0, 3.5, 4.0, 5.0];
 
 type ProductStatus = 'Mineração' | 'Teste' | 'Validação' | 'Escala' | 'Descontinuado';
 
-interface DailyHistoryEntry {
-  id: string;
-  date: string;
-  spend: number;
-  impressions: number;
-  clicks: number;
-  atc: number;
-  ic: number;
-  sales: number;
-  revenue: number;
-  profit: number;
-  cpa: number;
-  roas: number;
-  ctr: number;
-  atcRate: number;
-  cpc: number;
-  cpm: number;
-  cvr: number;
-  status: 'good' | 'bad' | 'warning';
-  platform: Platform;
-}
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('gerenciie_auth') === 'true';
-  });
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
-  const [planningData, setPlanningData] = useState(() => {
-    const saved = localStorage.getItem('gerenciie_planning_data');
-    return saved ? JSON.parse(saved) : {
-      monthlyBudget: 5000,
-      expectedCTR: 1.5,
-      expectedCVR: 2.0,
-      expectedCPM: 15.00,
-      expectedATCRate: 8.0,
-      expectedICRate: 40.0
+  const [planningData, setPlanningData] = useState({
+    monthlyBudget: 5000,
+    expectedCTR: 1.5,
+    expectedCVR: 2.0,
+    expectedCPM: 15.00,
+    expectedATCRate: 8.0,
+    expectedICRate: 40.0
+  });
+
+  const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
+
+  const [planningHistory, setPlanningHistory] = useState<any[]>([]);
+
+  const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
+  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning'>('overview');
+  
+  const [pricingData, setPricingData] = useState<PricingData>({
+    productName: 'Produto Exemplo',
+    currency: 'BRL',
+    costPrice: 52.50,
+    freightIn: 5.00,
+    packagingCost: 2.00,
+    shippingLabel: 0,
+    fixedFee: 0,
+    marketplaceCommissionPercent: 0,
+    gatewayFee: 0,
+    marketingPercent: 25,
+    fixedOpCost: 1500,
+    taxPercent: 6,
+    desiredMarkup: 2.5,
+    estimatedMonthlySales: 200,
+    taxRegime: TaxRegime.SIMPLES_NACIONAL,
+    cardTaxPercent: 5.99,
+    paymentReservePercent: 5,
+    yampiFeePercent: 2.5,
+    icmsPercent: 0,
+    pixTaxPercent: 1,
+    newTaxPercent: 0,
+    adsTaxPercent: 4.38
+  });
+
+  const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
+
+  const [scaleMultiplier, setScaleMultiplier] = useState<number>(2);
+
+  // Auth Effect
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthenticated(!!u);
+      setIsLoading(false);
+      if (u) {
+        // Test connection
+        const testConnection = async () => {
+          try {
+            await getDocFromServer(doc(db, 'test', 'connection'));
+          } catch (error) {
+            if(error instanceof Error && error.message.includes('the client is offline')) {
+              console.error("Please check your Firebase configuration.");
+            }
+          }
+        };
+        testConnection();
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Listeners
+  useEffect(() => {
+    if (!user) return;
+
+    // Listen for products
+    const productsQuery = query(collection(db, 'products'), where('userId', '==', user.uid));
+    const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
+      const prods = snapshot.docs.map(d => d.data() as PricingData);
+      setSavedProducts(prods);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
+
+    // Listen for campaigns
+    const campaignsQuery = query(collection(db, 'campaigns'), where('userId', '==', user.uid));
+    const unsubscribeCampaigns = onSnapshot(campaignsQuery, (snapshot) => {
+      const camps = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPlanningCampaigns(camps);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'campaigns'));
+
+    // Listen for planning history
+    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', user.uid), orderBy('date', 'desc'));
+    const unsubscribeHistory = onSnapshot(historyQuery, (snapshot) => {
+      const hist = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPlanningHistory(hist);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'planning_history'));
+
+    return () => {
+      unsubscribeProducts();
+      unsubscribeCampaigns();
+      unsubscribeHistory();
     };
-  });
+  }, [user]);
 
-  const [planningCampaigns, setPlanningCampaigns] = useState<any[]>(() => {
-    const saved = localStorage.getItem('gerenciie_planning_campaigns');
-    return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'teste reino unido - 03/05', spend: 12.65, impressions: 116, clicks: 3, atc: 1, ic: 0, sales: 0, active: true, selected: true, phase: 'Teste' },
-      { id: '2', name: 'teste big fiver - 02/05', spend: 158.87, impressions: 5218, clicks: 211, atc: 45, ic: 18, sales: 5, active: true, selected: true, phase: 'Validação' },
-    ];
-  });
-
-  const addPlanningCampaign = (phase: 'Teste' | 'Validação' | 'Escala' = 'Teste') => {
+  const addPlanningCampaign = async (phase: 'Teste' | 'Validação' | 'Escala' = 'Teste') => {
+    if (!user) return;
     const newCamp = {
-      id: Math.random().toString(36).substr(2, 9),
+      userId: user.uid,
       name: `${phase} - ${new Date().toLocaleDateString('pt-BR')}`,
       spend: 0,
       impressions: 0,
@@ -89,173 +209,113 @@ export default function App() {
       sales: 0,
       active: true,
       selected: true,
-      phase: phase
+      phase: phase,
+      notes: '',
+      createdAt: serverTimestamp()
     };
-    setPlanningCampaigns([...planningCampaigns, newCamp]);
+    try {
+      await addDoc(collection(db, 'campaigns'), newCamp);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'campaigns');
+    }
   };
 
-  const updatePlanningCampaign = (id: string, updates: any) => {
-    setPlanningCampaigns(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  const updatePlanningCampaign = async (id: string, updates: any) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'campaigns', id), updates, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `campaigns/${id}`);
+    }
   };
 
-  const removePlanningCampaign = (id: string) => {
-    setPlanningCampaigns(prev => prev.filter(c => c.id !== id));
+  const removePlanningCampaign = async (id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'campaigns', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `campaigns/${id}`);
+    }
   };
 
-  const toggleSelectAllPlanning = (val: boolean) => {
-    setPlanningCampaigns(prev => prev.map(c => ({ ...c, selected: val })));
+  const toggleSelectAllPlanning = async (val: boolean) => {
+    if (!user) return;
+    // For large operations, a batch or sequential updates would be needed. 
+    // Simplified for this context:
+    planningCampaigns.forEach(c => {
+      updatePlanningCampaign(c.id, { selected: val });
+    });
   };
 
-  const [planningHistory, setPlanningHistory] = useState<any[]>(() => {
-    const saved = localStorage.getItem('gerenciie_planning_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const savePlanningSimulation = () => {
+  const savePlanningSimulation = async () => {
+    if (!user) return;
     if (planningDiagnostic.budget === 0 && planningDiagnostic.sales === 0) return;
     
     const newEntry = {
-      id: Math.random().toString(36).substr(2, 9),
+      userId: user.uid,
       date: new Date().toLocaleDateString('pt-BR'),
       spend: planningDiagnostic.budget,
       revenue: planningDiagnostic.revenue,
       roas: planningDiagnostic.roas,
       cpa: planningDiagnostic.cpa,
-      profit: planningDiagnostic.profit
+      profit: planningDiagnostic.profit,
+      createdAt: serverTimestamp()
     };
     
-    setPlanningHistory([newEntry, ...planningHistory]);
+    try {
+      await addDoc(collection(db, 'planning_history'), newEntry);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'planning_history');
+    }
   };
 
-  const [planningFilter, setPlanningFilter] = useState<'all' | 'top' | 'middle' | 'bottom'>('all');
-
-  const [platform, setPlatform] = useState<Platform>(() => {
-    const saved = localStorage.getItem('gerenciie_platform');
-    return (saved as Platform) || Platform.DROPSHIPPING;
-  });
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'daily' | 'compass' | 'simulation' | 'planning'>(() => {
-    const saved = localStorage.getItem('gerenciie_active_tab');
-    return (saved as any) || 'overview';
-  });
-  const [funnelFilter, setFunnelFilter] = useState<'all' | 'top' | 'middle' | 'bottom'>(() => {
-    const saved = localStorage.getItem('gerenciie_funnel_filter');
-    return (saved as any) || 'all';
-  });
-  
-  const [pricingData, setPricingData] = useState<PricingData>(() => {
-    const saved = localStorage.getItem('gerenciie_pricing_data');
-    return saved ? JSON.parse(saved) : {
-      productName: 'Produto Exemplo',
-      currency: 'BRL',
-      costPrice: 52.50,
-      freightIn: 5.00,
-      packagingCost: 2.00,
-      shippingLabel: 0,
-      fixedFee: 0,
-      marketplaceCommissionPercent: 0,
-      gatewayFee: 0,
-      marketingPercent: 25,
-      fixedOpCost: 1500,
-      taxPercent: 6,
-      desiredMarkup: 2.5,
-      estimatedMonthlySales: 200,
-      taxRegime: TaxRegime.SIMPLES_NACIONAL,
-      cardTaxPercent: 5.99,
-      paymentReservePercent: 5,
-      yampiFeePercent: 2.5,
-      icmsPercent: 0,
-      pixTaxPercent: 1,
-      newTaxPercent: 0,
-      adsTaxPercent: 4.38
-    };
-  });
-
-  const [savedProducts, setSavedProducts] = useState<PricingData[]>(() => {
-    const saved = localStorage.getItem('gerenciie_saved_products');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const saveProduct = () => {
-    if (!pricingData.productName) return;
-    const existingIndex = savedProducts.findIndex(p => p.productName === pricingData.productName);
-    let updated;
-    if (existingIndex >= 0) {
-      updated = [...savedProducts];
-      updated[existingIndex] = { ...pricingData };
-    } else {
-      updated = [...savedProducts, { ...pricingData }];
+  const saveProduct = async () => {
+    if (!user || !pricingData.productName) return;
+    
+    const productId = pricingData.productName.replace(/[^a-zA-Z0-9]/g, '_');
+    try {
+      await setDoc(doc(db, 'products', `${user.uid}_${productId}`), {
+        ...pricingData,
+        userId: user.uid,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `products/${user.uid}_${productId}`);
     }
-    setSavedProducts(updated);
-    localStorage.setItem('gerenciie_saved_products', JSON.stringify(updated));
+  };
+
+  const deleteProduct = async (name: string) => {
+    if (!user) return;
+    const productId = name.replace(/[^a-zA-Z0-9]/g, '_');
+    try {
+      await deleteDoc(doc(db, 'products', `${user.uid}_${productId}`));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `products/${user.uid}_${productId}`);
+    }
   };
 
   const loadProduct = (product: PricingData) => {
     setPricingData({ ...product });
   };
 
-  const deleteProduct = (name: string) => {
-    const updated = savedProducts.filter(p => p.productName !== name);
-    setSavedProducts(updated);
-    localStorage.setItem('gerenciie_saved_products', JSON.stringify(updated));
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      setShowLogin(false);
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
 
-  const [scaleMultiplier, setScaleMultiplier] = useState<number>(() => {
-    const saved = localStorage.getItem('gerenciie_scale_multiplier');
-    return saved ? parseFloat(saved) : 2;
-  });
-
-  // States para Métricas Diárias
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dailyAds, setDailyAds] = useState({
-    spend: 0,
-    impressions: 0,
-    clicks: 0,
-    atc: 0,
-    ic: 0,
-    sales: 0,
-    revenue: 0
-  });
-
-  const [dailyHistory, setDailyHistory] = useState<DailyHistoryEntry[]>(() => {
-    const saved = localStorage.getItem('gerenciie_daily_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_daily_history', JSON.stringify(dailyHistory));
-  }, [dailyHistory]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_platform', platform);
-  }, [platform]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_active_tab', activeTab);
-  }, [activeTab]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_funnel_filter', funnelFilter);
-  }, [funnelFilter]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_pricing_data', JSON.stringify(pricingData));
-  }, [pricingData]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_scale_multiplier', scaleMultiplier.toString());
-  }, [scaleMultiplier]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_planning_data', JSON.stringify(planningData));
-  }, [planningData]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_planning_campaigns', JSON.stringify(planningCampaigns));
-  }, [planningCampaigns]);
-
-  useEffect(() => {
-    localStorage.setItem('gerenciie_planning_history', JSON.stringify(planningHistory));
-  }, [planningHistory]);
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   useEffect(() => {
     if (platform === Platform.SHOPEE) {
@@ -343,54 +403,7 @@ export default function App() {
     else if (cpa > currentResult.maxCPA) scaleGuidance = 'PERIGO: CPA furando o breakeven.';
 
     return { budget, impressions, clicks, atc, ic, sales, revenue, profit, cpa, roas, cpc, ctr, cvr, atcRate, icRate, cpm, issues, dailyData: [], scaleGuidance, summaryByPhase };
-  }, [planningCampaigns, planningFilter, currentResult, pricingData]);
-
-  const dailyMetrics = useMemo(() => {
-    const { spend, revenue, sales, impressions, clicks, atc } = dailyAds;
-    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
-    
-    return {
-      roas: spend > 0 ? revenue / spend : 0,
-      cpa: sales > 0 ? spend / sales : 0,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-      cpc: clicks > 0 ? spend / clicks : 0,
-      cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
-      cvr: clicks > 0 ? (sales / clicks) * 100 : 0,
-      atcRate: clicks > 0 ? (atc / clicks) * 100 : 0,
-      profit: revenue - (unitVariableCostsNoAds * sales) - spend
-    };
-  }, [dailyAds, currentResult, pricingData]);
-
-  const scaleOrientation = useMemo(() => {
-    if (dailyAds.spend === 0) return { status: 'neutral', message: 'Aguardando dados de investimento para análise.' };
-    
-    const { cpa, roas, profit } = dailyMetrics;
-    const { maxCPA, cpaIdeal } = currentResult;
-
-    if (cpa > 0 && cpa <= cpaIdeal && profit > 0) {
-      return { 
-        status: 'scale', 
-        message: '🔥 OPORTUNIDADE DE ESCALA: Seus custos estão abaixo do ideal e a operação está lucrativa. Aumente o orçamento gradualmente (15-20%).' 
-      };
-    } else if (cpa > cpaIdeal && cpa <= maxCPA) {
-      return { 
-        status: 'maintain', 
-        message: '✅ OPERAÇÃO ESTÁVEL: Você está dentro da margem de segurança. Mantenha o orçamento e foque em otimizar criativos para baixar o CPA.' 
-      };
-    } else if (cpa > maxCPA) {
-      return { 
-        status: 'pause', 
-        message: '🚨 ALERTA DE PREJUÍZO: Seu CPA ultrapassou o Breakeven. Pause ou reduza drasticamente o orçamento. Verifique oferta e criativos imediatamente.' 
-      };
-    } else if (dailyAds.spend > 0 && dailyAds.sales === 0) {
-      if (dailyAds.spend > maxCPA * 1.5) {
-        return { status: 'pause', message: '⚠️ GASTO ALTO SEM VENDAS: Você já gastou 1.5x o seu CPA máximo sem converter. Reavalie a campanha.' };
-      }
-      return { status: 'warning', message: '⏳ EM TESTE: Aguardando volume de dados para conclusão. Monitore o CTR e Taxa de ATC.' };
-    }
-
-    return { status: 'neutral', message: 'Analise as métricas acima para tomar sua decisão.' };
-  }, [dailyAds.spend, dailyAds.sales, dailyMetrics, currentResult]);
+  }, [planningCampaigns, currentResult, pricingData]);
 
   const scaleResult = useMemo(() => {
     const scaledData = {
@@ -403,60 +416,16 @@ export default function App() {
 
   const currentSymbol = getCurrencySymbol(pricingData.currency);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAuthenticated(true);
-    localStorage.setItem('gerenciie_auth', 'true');
-    setShowLogin(false);
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('gerenciie_auth');
-  };
-
-  const saveDailyMetrics = () => {
-    const { spend, revenue, sales, impressions, clicks, atc, ic } = dailyAds;
-    if (spend === 0 && revenue === 0) return;
-
-    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
-    
-    const profit = revenue - (unitVariableCostsNoAds * sales) - spend;
-    const cpa = sales > 0 ? spend / sales : 0;
-    const roas = spend > 0 ? revenue / spend : 0;
-    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-    const cvr = clicks > 0 ? (sales / clicks) * 100 : 0;
-    const cpc = clicks > 0 ? spend / clicks : 0;
-
-    const entry: DailyHistoryEntry = {
-      id: Date.now().toString(),
-      date: selectedDate,
-      spend,
-      impressions,
-      clicks,
-      atc,
-      ic,
-      sales,
-      revenue,
-      profit,
-      cpa,
-      roas,
-      ctr,
-      atcRate: clicks > 0 ? (atc / clicks) * 100 : 0,
-      cpc,
-      cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
-      cvr,
-      status: cpa <= currentResult.maxCPA ? 'good' : cpa <= currentResult.maxCPA * 1.2 ? 'warning' : 'bad',
-      platform
-    };
-
-    setDailyHistory([entry, ...dailyHistory]);
-    setDailyAds({ spend: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0 });
-  };
-
-  const deleteHistoryItem = (id: string) => {
-    setDailyHistory(dailyHistory.filter(item => item.id !== id));
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated && !showLogin) {
     return (
@@ -555,11 +524,6 @@ export default function App() {
                 desc="Cálculo de margem real com todas as taxas de gateway, impostos e custos fixos."
               />
               <FeatureCard 
-                icon={<Activity size={24}/>} 
-                title="Métricas Diárias" 
-                desc="Acompanhe ROAS, CPA e Lucro diário em uma interface limpa e objetiva."
-              />
-              <FeatureCard 
                 icon={<ShieldCheck size={24}/>} 
                 title="Bússola de KPIs" 
                 desc="Saiba exatamente seus limites de CPA, ATC e IC para não queimar dinheiro."
@@ -639,20 +603,22 @@ export default function App() {
               <Lock size={28} />
             </div>
             <h2 className="text-3xl font-black text-white italic tracking-tighter">BEM-VINDO AO <span className="text-blue-500">PRO</span></h2>
+            <p className="text-slate-400 text-xs font-bold mt-4 uppercase tracking-widest">Acesse sua conta com segurança</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block px-1">E-mail Profissional</label>
-              <input required type="email" placeholder="cfo@seu-ecom.com" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-4 outline-none text-white font-bold focus:border-blue-500/50" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest block px-1">Chave</label>
-              <input required type="password" placeholder="••••••••" className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-4 outline-none text-white font-bold focus:border-blue-500/50" />
-            </div>
-            <button type="submit" className="w-full blue-gradient text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest">
-              Autenticar e Entrar
-            </button>
-          </form>
+          
+          <button 
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-4 bg-white text-black py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl shadow-white/5"
+          >
+            <Globe size={18} className="text-blue-600" />
+            Entrar com Google
+          </button>
+          
+          <div className="mt-8 pt-8 border-t border-white/5 text-center">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              Ao entrar, você concorda com nossos <br /> termos e política de privacidade.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -672,7 +638,6 @@ export default function App() {
 
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
           <NavItem icon={<LayoutDashboard size={18} />} label="Calculadora" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
-          <NavItem icon={<Activity size={18} />} label="Métricas Diárias" active={activeTab === 'daily'} onClick={() => setActiveTab('daily')} />
           <NavItem icon={<Target size={18} />} label="Planejamento Ads" active={activeTab === 'planning'} onClick={() => setActiveTab('planning')} />
           <NavItem icon={<ShieldCheck size={18} />} label="Bússola (KPIs)" active={activeTab === 'compass'} onClick={() => setActiveTab('compass')} />
           <NavItem icon={<Zap size={18} />} label="Simulação Escala" active={activeTab === 'simulation'} onClick={() => setActiveTab('simulation')} />
@@ -825,217 +790,6 @@ export default function App() {
                   </div>
                 </div>
              </div>
-          )}
-
-          {activeTab === 'daily' && (
-            <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
-                  <h2 className="text-3xl font-black text-black tracking-tight italic">Métricas de Performance</h2>
-                  <p className="text-slate-600 font-bold uppercase text-[10px] tracking-widest mt-1">Gestão diária de tráfego e vendas</p>
-                </div>
-                <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-                   <Calendar size={16} className="ml-3 text-blue-600" />
-                   <input 
-                    type="date" 
-                    value={selectedDate} 
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-transparent border-none outline-none font-bold text-xs p-2 pr-4"
-                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-4 space-y-6">
-                  <Section title="Log de Hoje" icon={<Plus size={16}/>}>
-                    <div className="grid grid-cols-2 gap-4">
-                      <ModernInput label="Investido (Ads)" value={dailyAds.spend} onChange={v => setDailyAds({...dailyAds, spend: v})} symbol={currentSymbol} />
-                      <ModernInput label="Faturamento" value={dailyAds.revenue} onChange={v => setDailyAds({...dailyAds, revenue: v})} symbol={currentSymbol} />
-                      <ModernInput label="Vendas" value={dailyAds.sales} onChange={v => setDailyAds({...dailyAds, sales: v})} symbol="#" />
-                      <ModernInput label="Impressões" value={dailyAds.impressions} onChange={v => setDailyAds({...dailyAds, impressions: v})} symbol="#" />
-                      <ModernInput label="Cliques" value={dailyAds.clicks} onChange={v => setDailyAds({...dailyAds, clicks: v})} symbol="#" />
-                      <ModernInput label="ATC" value={dailyAds.atc} onChange={v => setDailyAds({...dailyAds, atc: v})} symbol="#" />
-                    </div>
-                    <button onClick={saveDailyMetrics} className="w-full blue-gradient text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg flex items-center justify-center gap-2">
-                      <Save size={16} /> Salvar Métricas do Dia
-                    </button>
-                  </Section>
-
-                  <div className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm space-y-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Calculadora Tempo Real</p>
-                      <div className="flex gap-1 bg-slate-50 p-1 rounded-lg">
-                        <button 
-                          onClick={() => setFunnelFilter('all')}
-                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          TUDO
-                        </button>
-                        <button 
-                          onClick={() => setFunnelFilter('top')}
-                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'top' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          TOPO
-                        </button>
-                        <button 
-                          onClick={() => setFunnelFilter('middle')}
-                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'middle' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          MEIO
-                        </button>
-                        <button 
-                          onClick={() => setFunnelFilter('bottom')}
-                          className={`px-3 py-1 rounded-md text-[9px] font-black transition-all ${funnelFilter === 'bottom' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          FUNDO
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                       {(funnelFilter === 'all' || funnelFilter === 'top') && (
-                         <>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">CTR</p>
-                              <p className="text-lg font-black">{dailyMetrics.ctr.toFixed(2)}%</p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">CPC</p>
-                              <p className="text-lg font-black">{formatCurrency(dailyMetrics.cpc, pricingData.currency)}</p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">CPM</p>
-                              <p className="text-lg font-black">{formatCurrency(dailyMetrics.cpm, pricingData.currency)}</p>
-                           </div>
-                         </>
-                       )}
-
-                       {(funnelFilter === 'all' || funnelFilter === 'middle') && (
-                         <>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">Taxa ATC</p>
-                              <p className="text-lg font-black">{dailyMetrics.atcRate.toFixed(2)}%</p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">ATC</p>
-                              <p className="text-lg font-black">{dailyAds.atc}</p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">IC</p>
-                              <p className="text-lg font-black">{dailyAds.ic}</p>
-                           </div>
-                         </>
-                       )}
-
-                       {(funnelFilter === 'all' || funnelFilter === 'bottom') && (
-                         <>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">ROAS</p>
-                              <p className="text-lg font-black">{dailyMetrics.roas.toFixed(2)}</p>
-                           </div>
-                           <div className={`p-3 rounded-xl ${ (dailyMetrics.cpa > currentResult.maxCPA) ? 'bg-rose-50' : 'bg-emerald-50' }`}>
-                              <p className="text-[8px] font-black text-slate-500 uppercase">CPA</p>
-                              <p className={`text-lg font-black ${ (dailyMetrics.cpa > currentResult.maxCPA) ? 'text-rose-600' : 'text-emerald-600' }`}>
-                                {formatCurrency(dailyMetrics.cpa, pricingData.currency)}
-                              </p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase">CVR</p>
-                              <p className="text-lg font-black">{dailyMetrics.cvr.toFixed(2)}%</p>
-                           </div>
-                         </>
-                       )}
-                       
-                       {funnelFilter === 'all' && (
-                         <div className={`p-3 rounded-xl col-span-full ${ dailyMetrics.profit >= 0 ? 'bg-emerald-50' : 'bg-rose-50' }`}>
-                            <p className="text-[8px] font-black text-slate-500 uppercase">Lucro Est. (Dia)</p>
-                            <p className={`text-xl font-black ${ dailyMetrics.profit >= 0 ? 'text-emerald-600' : 'text-rose-600' }`}>
-                              {formatCurrency(dailyMetrics.profit, pricingData.currency)}
-                            </p>
-                         </div>
-                       )}
-                    </div>
-
-                    <div className={`p-4 rounded-2xl border flex items-start gap-3 transition-all ${
-                      scaleOrientation.status === 'scale' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
-                      scaleOrientation.status === 'pause' ? 'bg-rose-50 border-rose-100 text-rose-800' :
-                      scaleOrientation.status === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800' :
-                      'bg-slate-50 border-slate-100 text-slate-600'
-                    }`}>
-                      <div className="mt-0.5">
-                        {scaleOrientation.status === 'scale' && <TrendingUp size={16} />}
-                        {scaleOrientation.status === 'pause' && <AlertTriangle size={16} />}
-                        {scaleOrientation.status === 'warning' && <Info size={16} />}
-                        {scaleOrientation.status === 'maintain' && <CheckCircle2 size={16} />}
-                        {scaleOrientation.status === 'neutral' && <MousePointer2 size={16} />}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest mb-1">Orientação de Escala</p>
-                        <p className="text-xs font-bold leading-relaxed">{scaleOrientation.message}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-8">
-                   <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-                      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                         <h3 className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                           <History size={16} className="text-blue-500"/> Histórico Recente
-                         </h3>
-                         <button className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1">
-                           <Download size={12}/> Exportar CSV
-                         </button>
-                      </div>
-                      <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-100">
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Data</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Gasto</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Receita</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">ROAS</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">CPA</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">Lucro Est.</th>
-                              <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {dailyHistory.map((item) => (
-                              <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
-                                <td className="px-6 py-4 text-xs font-bold text-slate-800">{new Date(item.date).toLocaleDateString('pt-BR')}</td>
-                                <td className="px-6 py-4 text-xs font-bold">{formatCurrency(item.spend, pricingData.currency)}</td>
-                                <td className="px-6 py-4 text-xs font-bold">{formatCurrency(item.revenue, pricingData.currency)}</td>
-                                <td className="px-6 py-4">
-                                  <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${item.roas > 2 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                    {item.roas.toFixed(2)}x
-                                  </span>
-                                </td>
-                                <td className={`px-6 py-4 text-xs font-bold ${item.status === 'bad' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                  {formatCurrency(item.cpa, pricingData.currency)}
-                                </td>
-                                <td className={`px-6 py-4 text-xs font-bold ${item.profit > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {formatCurrency(item.profit, pricingData.currency)}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                  <button onClick={() => deleteHistoryItem(item.id)} className="p-2 text-slate-300 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all">
-                                    <Trash2 size={14}/>
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                            {dailyHistory.length === 0 && (
-                              <tr>
-                                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic text-sm font-bold">Nenhum dado registrado para este produto.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                   </div>
-                </div>
-              </div>
-            </div>
           )}
 
           {activeTab === 'simulation' && (
@@ -1236,18 +990,6 @@ export default function App() {
                     <Plus size={16} />
                     ADICIONAR DIA/CAMPANHA
                   </button>
-
-                  <div className="flex gap-1 bg-white p-1 rounded-2xl shadow-sm border border-slate-100 h-fit">
-                    {['all', 'top', 'middle', 'bottom'].map((f: any) => (
-                      <button 
-                        key={f}
-                        onClick={() => setPlanningFilter(f)}
-                        className={`px-4 py-2 rounded-xl text-[9px] font-black tracking-widest uppercase transition-all ${planningFilter === f ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-800 hover:bg-slate-50'}`}
-                      >
-                        {f === 'all' ? 'Ver Tudo' : f === 'top' ? 'Topo' : f === 'middle' ? 'Meio' : 'Fundo'}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
 
@@ -1276,6 +1018,7 @@ export default function App() {
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Checkouts</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">CVR (%)</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Vendas</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 whitespace-nowrap">Notas / Observações</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 w-10"></th>
                       </tr>
                     </thead>
@@ -1376,6 +1119,15 @@ export default function App() {
                               className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
                             />
                           </td>
+                          <td className="p-2">
+                            <textarea 
+                              value={camp.notes || ''} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { notes: e.target.value })}
+                              placeholder="Observações..."
+                              rows={1}
+                              className="w-full bg-transparent text-xs font-bold text-slate-600 border-none p-2 focus:ring-0 focus:bg-white rounded-lg resize-none min-h-[36px]"
+                            />
+                          </td>
                           <td className="p-4 text-center">
                             <button onClick={() => removePlanningCampaign(camp.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
                               <Trash2 size={14} />
@@ -1397,48 +1149,20 @@ export default function App() {
                         <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Calculadora</h3>
                         <p className="text-xs font-black italic text-black">TEMPO REAL</p>
                       </div>
-                      <div className="flex gap-1 bg-slate-50 p-1 rounded-lg">
-                        {[
-                          { id: 'all', label: 'TUDO' },
-                          { id: 'top', label: 'TOPO' },
-                          { id: 'middle', label: 'MEIO' },
-                          { id: 'bottom', label: 'FUNDO' }
-                        ].map((t) => (
-                          <button 
-                            key={t.id} 
-                            onClick={() => setPlanningFilter(t.id as any)}
-                            className={`px-2 py-1 rounded text-[8px] font-bold transition-all ${planningFilter === t.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-600'}`}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">
-                      {(planningFilter === 'all' || planningFilter === 'top') && (
-                        <>
-                          <MetricCardSmall label="CTR" value={`${planningDiagnostic.ctr.toFixed(2)}%`} icon={<MousePointer2 size={12}/>} />
-                          <MetricCardSmall label="CPC" value={formatCurrency(planningDiagnostic.cpc, pricingData.currency)} icon={<MousePointerClick size={12}/>} />
-                          <MetricCardSmall label="CPM" value={formatCurrency(planningDiagnostic.cpm, pricingData.currency)} icon={<Eye size={12}/>} />
-                        </>
-                      )}
+                      <MetricCardSmall label="CTR" value={`${planningDiagnostic.ctr.toFixed(2)}%`} icon={<MousePointer2 size={12}/>} />
+                      <MetricCardSmall label="CPC" value={formatCurrency(planningDiagnostic.cpc, pricingData.currency)} icon={<MousePointerClick size={12}/>} />
+                      <MetricCardSmall label="CPM" value={formatCurrency(planningDiagnostic.cpm, pricingData.currency)} icon={<Eye size={12}/>} />
                       
-                      {(planningFilter === 'all' || planningFilter === 'middle') && (
-                        <>
-                          <MetricCardSmall label="TAXA ATC" value={`${planningDiagnostic.atcRate.toFixed(2)}%`} icon={<ShoppingCart size={12}/>} />
-                          <MetricCardSmall label="ATC" value={Math.floor(planningDiagnostic.atc)} icon={<ShoppingCart size={12}/>} />
-                          <MetricCardSmall label="IC" value={Math.floor(planningDiagnostic.ic)} icon={<CreditCard size={12}/>} />
-                        </>
-                      )}
+                      <MetricCardSmall label="TAXA ATC" value={`${planningDiagnostic.atcRate.toFixed(2)}%`} icon={<ShoppingCart size={12}/>} />
+                      <MetricCardSmall label="ATC" value={Math.floor(planningDiagnostic.atc)} icon={<ShoppingCart size={12}/>} />
+                      <MetricCardSmall label="IC" value={Math.floor(planningDiagnostic.ic)} icon={<CreditCard size={12}/>} />
                       
-                      {(planningFilter === 'all' || planningFilter === 'bottom') && (
-                        <>
-                          <MetricCardSmall label="ROAS" value={planningDiagnostic.roas.toFixed(2)} icon={<TrendingUp size={12}/>} />
-                          <MetricCardSmall label="CPA" value={formatCurrency(planningDiagnostic.cpa, pricingData.currency)} icon={<Target size={12}/>} />
-                          <MetricCardSmall label="CVR" value={`${planningDiagnostic.cvr.toFixed(2)}%`} icon={<ShoppingBag size={12}/>} />
-                        </>
-                      )}
+                      <MetricCardSmall label="ROAS" value={planningDiagnostic.roas.toFixed(2)} icon={<TrendingUp size={12}/>} />
+                      <MetricCardSmall label="CPA" value={formatCurrency(planningDiagnostic.cpa, pricingData.currency)} icon={<Target size={12}/>} />
+                      <MetricCardSmall label="CVR" value={`${planningDiagnostic.cvr.toFixed(2)}%`} icon={<ShoppingBag size={12}/>} />
                     </div>
 
                     <div className="mt-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center">
