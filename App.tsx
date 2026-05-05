@@ -96,14 +96,6 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [planningData, setPlanningData] = useState({
-    monthlyBudget: 5000,
-    expectedCTR: 1.5,
-    expectedCVR: 2.0,
-    expectedCPM: 15.00,
-    expectedATCRate: 8.0,
-    expectedICRate: 40.0
-  });
 
   const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
 
@@ -416,16 +408,7 @@ export default function App() {
 
   const currentSymbol = getCurrencySymbol(pricingData.currency);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return null;
 
   if (!isAuthenticated && !showLogin) {
     return (
