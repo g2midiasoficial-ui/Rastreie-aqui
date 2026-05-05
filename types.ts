@@ -14,6 +14,7 @@ export enum TaxRegime {
 export type CurrencyCode = 'BRL' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CNY' | 'ARS' | 'CLP' | 'MXN' | 'COP' | 'PEN';
 
 export interface PricingData {
+  productName: string;
   currency: CurrencyCode;
   costPrice: number;
   freightIn: number;

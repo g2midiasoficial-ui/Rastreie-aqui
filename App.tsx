@@ -72,15 +72,15 @@ export default function App() {
   const [planningCampaigns, setPlanningCampaigns] = useState<any[]>(() => {
     const saved = localStorage.getItem('gerenciie_planning_campaigns');
     return saved ? JSON.parse(saved) : [
-      { id: '1', name: 'teste reino unido - 03/05', spend: 12.65, impressions: 116, clicks: 3, atc: 1, ic: 0, sales: 0, active: true, selected: true },
-      { id: '2', name: 'teste big fiver - 02/05', spend: 158.87, impressions: 5218, clicks: 211, atc: 45, ic: 18, sales: 5, active: true, selected: true },
+      { id: '1', name: 'teste reino unido - 03/05', spend: 12.65, impressions: 116, clicks: 3, atc: 1, ic: 0, sales: 0, active: true, selected: true, phase: 'Teste' },
+      { id: '2', name: 'teste big fiver - 02/05', spend: 158.87, impressions: 5218, clicks: 211, atc: 45, ic: 18, sales: 5, active: true, selected: true, phase: 'Validação' },
     ];
   });
 
-  const addPlanningCampaign = () => {
+  const addPlanningCampaign = (phase: 'Teste' | 'Validação' | 'Escala' = 'Teste') => {
     const newCamp = {
       id: Math.random().toString(36).substr(2, 9),
-      name: `Nova Entrada - ${new Date().toLocaleDateString('pt-BR')}`,
+      name: `${phase} - ${new Date().toLocaleDateString('pt-BR')}`,
       spend: 0,
       impressions: 0,
       clicks: 0,
@@ -88,7 +88,8 @@ export default function App() {
       ic: 0,
       sales: 0,
       active: true,
-      selected: true
+      selected: true,
+      phase: phase
     };
     setPlanningCampaigns([...planningCampaigns, newCamp]);
   };
@@ -144,6 +145,7 @@ export default function App() {
   const [pricingData, setPricingData] = useState<PricingData>(() => {
     const saved = localStorage.getItem('gerenciie_pricing_data');
     return saved ? JSON.parse(saved) : {
+      productName: 'Produto Exemplo',
       currency: 'BRL',
       costPrice: 52.50,
       freightIn: 5.00,
@@ -167,6 +169,35 @@ export default function App() {
       adsTaxPercent: 4.38
     };
   });
+
+  const [savedProducts, setSavedProducts] = useState<PricingData[]>(() => {
+    const saved = localStorage.getItem('gerenciie_saved_products');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const saveProduct = () => {
+    if (!pricingData.productName) return;
+    const existingIndex = savedProducts.findIndex(p => p.productName === pricingData.productName);
+    let updated;
+    if (existingIndex >= 0) {
+      updated = [...savedProducts];
+      updated[existingIndex] = { ...pricingData };
+    } else {
+      updated = [...savedProducts, { ...pricingData }];
+    }
+    setSavedProducts(updated);
+    localStorage.setItem('gerenciie_saved_products', JSON.stringify(updated));
+  };
+
+  const loadProduct = (product: PricingData) => {
+    setPricingData({ ...product });
+  };
+
+  const deleteProduct = (name: string) => {
+    const updated = savedProducts.filter(p => p.productName !== name);
+    setSavedProducts(updated);
+    localStorage.setItem('gerenciie_saved_products', JSON.stringify(updated));
+  };
 
   const [scaleMultiplier, setScaleMultiplier] = useState<number>(() => {
     const saved = localStorage.getItem('gerenciie_scale_multiplier');
@@ -269,6 +300,13 @@ export default function App() {
     const ic = selectedCamps.reduce((acc, c) => acc + Number(c.ic || 0), 0);
     const sales = selectedCamps.reduce((acc, c) => acc + Number(c.sales || 0), 0);
     
+    // Summary by phase
+    const summaryByPhase = {
+      Teste: selectedCamps.filter(c => c.phase === 'Teste').length,
+      Validação: selectedCamps.filter(c => c.phase === 'Validação').length,
+      Escala: selectedCamps.filter(c => c.phase === 'Escala').length,
+    };
+
     const revenue = sales * currentResult.finalPrice;
     
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
@@ -289,7 +327,7 @@ export default function App() {
     const issues = [];
     
     if (selectedCamps.length === 0) {
-      return { budget: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0, profit: 0, cpa: 0, roas: 0, cpc: 0, ctr: 0, cvr: 0, atcRate: 0, icRate: 0, cpm: 0, issues: [], dailyData: [], scaleGuidance: 'Selecione entradas para analisar.' };
+      return { budget: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0, profit: 0, cpa: 0, roas: 0, cpc: 0, ctr: 0, cvr: 0, atcRate: 0, icRate: 0, cpm: 0, issues: [], dailyData: [], scaleGuidance: 'Selecione entradas para analisar.', summaryByPhase };
     }
 
     // Diagnóstico
@@ -304,7 +342,7 @@ export default function App() {
     else if (profit < 0) scaleGuidance = 'ALERTA: Reduza o budget ou congele a campanha.';
     else if (cpa > currentResult.maxCPA) scaleGuidance = 'PERIGO: CPA furando o breakeven.';
 
-    return { budget, impressions, clicks, atc, ic, sales, revenue, profit, cpa, roas, cpc, ctr, cvr, atcRate, icRate, cpm, issues, dailyData: [], scaleGuidance };
+    return { budget, impressions, clicks, atc, ic, sales, revenue, profit, cpa, roas, cpc, ctr, cvr, atcRate, icRate, cpm, issues, dailyData: [], scaleGuidance, summaryByPhase };
   }, [planningCampaigns, planningFilter, currentResult, pricingData]);
 
   const dailyMetrics = useMemo(() => {
@@ -753,6 +791,7 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   <div className="lg:col-span-4 space-y-6">
                     <Section title="Produto & Logística" icon={<Package size={16}/>}>
+                      <ModernInput label="Nome do Produto" value={pricingData.productName} onChange={v => setPricingData(prev => ({...prev, productName: v}))} />
                       <ModernInput label="Custo Produto" value={pricingData.costPrice} onChange={v => setPricingData(prev => ({...prev, costPrice: v}))} symbol={currentSymbol} />
                       <ModernInput label="Frete Fornecedor" value={pricingData.freightIn} onChange={v => setPricingData(prev => ({...prev, freightIn: v}))} symbol={currentSymbol} />
                       <ModernInput label="Markup Alvo" value={pricingData.desiredMarkup} onChange={v => setPricingData(prev => ({...prev, desiredMarkup: v}))} symbol="x" />
@@ -1113,13 +1152,91 @@ export default function App() {
                   <p className="text-slate-900 font-bold uppercase text-[10px] tracking-[0.1em]">ORGANIZE SUAS METAS E PREVEJA O LUCRO</p>
                 </div>
                 <div className="flex gap-4">
+                  <div className="flex gap-1 bg-white p-1 rounded-2xl shadow-sm border border-slate-100 items-center px-4 shrink-0">
+                    <Tag size={16} className="text-slate-400 mr-2" />
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-slate-400 uppercase">Produto</span>
+                      <input 
+                        type="text"
+                        value={pricingData.productName || ''}
+                        onChange={v => setPricingData({...pricingData, productName: v.target.value})}
+                        className="text-[11px] font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-24"
+                      />
+                    </div>
+                    <div className="w-px h-6 bg-slate-100 mx-2" />
+                    <Package size={16} className="text-slate-400 mr-2" />
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-slate-400 uppercase">Custo</span>
+                      <input 
+                        type="number"
+                        value={pricingData.costPrice}
+                        onChange={v => setPricingData({...pricingData, costPrice: Number(v.target.value)})}
+                        className="text-[11px] font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-16"
+                      />
+                    </div>
+                    <div className="w-px h-6 bg-slate-100 mx-2" />
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-slate-400 uppercase">Markup</span>
+                      <input 
+                        type="number"
+                        value={pricingData.desiredMarkup}
+                        onChange={v => setPricingData({...pricingData, desiredMarkup: Number(v.target.value)})}
+                        className="text-[11px] font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-10"
+                      />
+                    </div>
+                    <button 
+                      onClick={saveProduct}
+                      className="ml-2 bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all shadow-sm flex items-center justify-center"
+                      title="Salvar Produto"
+                    >
+                      <Save size={14} />
+                    </button>
+                  </div>
+
+                  {savedProducts.length > 0 && (
+                    <div className="relative group">
+                      <button className="h-full px-4 py-2 bg-white border border-slate-100 rounded-2xl shadow-sm text-[10px] font-black uppercase text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        <Box size={16} className="text-blue-500" />
+                        Meus Produtos
+                        <ChevronDown size={14} />
+                      </button>
+                      <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden hidden group-hover:block animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="p-4 border-b border-slate-50 bg-slate-50/50">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Produtos Salvos</p>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {savedProducts.map((p, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 hover:bg-blue-50 transition-colors group/item">
+                              <button 
+                                onClick={() => loadProduct(p)}
+                                className="flex-1 text-left"
+                              >
+                                <p className="text-xs font-black text-slate-800">{p.productName}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                                   Custo: {formatCurrency(p.costPrice, p.currency)} • MKP: {p.desiredMarkup}x
+                                </p>
+                              </button>
+                              <button 
+                                onClick={() => deleteProduct(p.productName)}
+                                className="p-1.5 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover/item:opacity-100"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <button 
-                    onClick={addPlanningCampaign}
+                    onClick={() => addPlanningCampaign('Teste')}
                     className="px-6 py-2.5 bg-black text-white rounded-2xl text-[10px] font-black tracking-widest uppercase hover:bg-slate-800 transition-all flex items-center gap-2"
                   >
                     <Plus size={16} />
                     ADICIONAR DIA/CAMPANHA
                   </button>
+
                   <div className="flex gap-1 bg-white p-1 rounded-2xl shadow-sm border border-slate-100 h-fit">
                     {['all', 'top', 'middle', 'bottom'].map((f: any) => (
                       <button 
@@ -1149,6 +1266,7 @@ export default function App() {
                           />
                         </th>
                         <th className="p-4 w-16 text-center text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100">ON</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100">Fase</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 whitespace-nowrap">ID/Nome da Campanha</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Investido ({currentSymbol})</th>
                         <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Impressões</th>
@@ -1179,6 +1297,22 @@ export default function App() {
                             >
                               <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${camp.active ? 'right-0.5' : 'left-0.5'}`} />
                             </button>
+                          </td>
+                          <td className="p-4">
+                            <select 
+                              value={camp.phase || 'Teste'}
+                              onChange={(e) => updatePlanningCampaign(camp.id, { phase: e.target.value })}
+                              className={`border-none text-[10px] font-black uppercase rounded-lg p-1 focus:ring-0 cursor-pointer transition-colors ${
+                                camp.phase === 'Teste' ? 'bg-amber-100 text-amber-700' :
+                                camp.phase === 'Validação' ? 'bg-blue-100 text-blue-700' :
+                                camp.phase === 'Escala' ? 'bg-emerald-100 text-emerald-700' : 
+                                'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              <option value="Teste">Teste</option>
+                              <option value="Validação">Validação</option>
+                              <option value="Escala">Escala</option>
+                            </select>
                           </td>
                           <td className="p-4">
                             <input 
@@ -1331,6 +1465,22 @@ export default function App() {
                       <p className="text-[10px] font-black text-slate-700 italic">
                         {planningDiagnostic.scaleGuidance}
                       </p>
+                      
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-slate-400 uppercase">Teste</span>
+                          <span className="text-[10px] font-black text-slate-800">{planningDiagnostic.summaryByPhase.Teste}</span>
+                        </div>
+                        <div className="flex flex-col border-x border-slate-200 px-2">
+                          <span className="text-[8px] font-black text-slate-400 uppercase">Validação</span>
+                          <span className="text-[10px] font-black text-slate-800">{planningDiagnostic.summaryByPhase['Validação']}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-slate-400 uppercase">Escala</span>
+                          <span className="text-[10px] font-black text-slate-800">{planningDiagnostic.summaryByPhase.Escala}</span>
+                        </div>
+                      </div>
+
                       {planningDiagnostic.issues.length > 0 && (
                         <div className="mt-2 space-y-1">
                           {planningDiagnostic.issues.slice(0, 2).map((issue, idx) => (
@@ -1640,17 +1790,20 @@ function Section({ title, icon, children }: any) {
   );
 }
 
-function ModernInput({ label, value, onChange, symbol }: any) {
+function ModernInput({ label, value, onChange, symbol, type }: any) {
   return (
     <div className="group">
       <label className="block text-[8px] font-black text-slate-700 uppercase mb-1.5 tracking-widest group-focus-within:text-blue-600 transition-colors">{label}</label>
       <div className="relative">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-black text-[10px]">{symbol}</div>
+        {symbol && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-black text-[10px]">{symbol}</div>}
         <input 
-          type={typeof value === 'number' ? 'number' : 'text'}
+          type={type || (typeof value === 'number' ? 'number' : 'text')}
           value={value} 
-          onChange={(e) => onChange(typeof value === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value)} 
-          className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2 pl-8 pr-4 outline-none focus:bg-white focus:border-blue-200 transition-all font-bold text-black text-xs" 
+          onChange={(e) => {
+            const val = type === 'number' || typeof value === 'number' ? (parseFloat(e.target.value) || 0) : e.target.value;
+            onChange(val);
+          }} 
+          className={`w-full bg-slate-50 border border-slate-100 rounded-xl py-2 ${symbol ? 'pl-8' : 'pl-4'} pr-4 outline-none focus:bg-white focus:border-blue-200 transition-all font-bold text-black text-xs`} 
         />
       </div>
     </div>
