@@ -16,7 +16,8 @@ import {
   BarChart4,
   MousePointer,
   Clock,
-  Briefcase
+  Briefcase,
+  XCircle
 } from 'lucide-react';
 import { Platform, PricingData, CalculationResult, TaxRegime, CurrencyCode } from './types.ts';
 import { calculatePricing, formatCurrency, getCurrencySymbol } from './utils/calculations.ts';
@@ -56,11 +57,82 @@ export default function App() {
   });
   const [showLogin, setShowLogin] = useState(false);
   
+  const [planningData, setPlanningData] = useState(() => {
+    const saved = localStorage.getItem('gerenciie_planning_data');
+    return saved ? JSON.parse(saved) : {
+      monthlyBudget: 5000,
+      expectedCTR: 1.5,
+      expectedCVR: 2.0,
+      expectedCPM: 15.00,
+      expectedATCRate: 8.0,
+      expectedICRate: 40.0
+    };
+  });
+
+  const [planningCampaigns, setPlanningCampaigns] = useState<any[]>(() => {
+    const saved = localStorage.getItem('gerenciie_planning_campaigns');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', name: 'teste reino unido - 03/05', spend: 12.65, impressions: 116, clicks: 3, atc: 1, ic: 0, sales: 0, active: true, selected: true },
+      { id: '2', name: 'teste big fiver - 02/05', spend: 158.87, impressions: 5218, clicks: 211, atc: 45, ic: 18, sales: 5, active: true, selected: true },
+    ];
+  });
+
+  const addPlanningCampaign = () => {
+    const newCamp = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: `Nova Entrada - ${new Date().toLocaleDateString('pt-BR')}`,
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      atc: 0,
+      ic: 0,
+      sales: 0,
+      active: true,
+      selected: true
+    };
+    setPlanningCampaigns([...planningCampaigns, newCamp]);
+  };
+
+  const updatePlanningCampaign = (id: string, updates: any) => {
+    setPlanningCampaigns(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const removePlanningCampaign = (id: string) => {
+    setPlanningCampaigns(prev => prev.filter(c => c.id !== id));
+  };
+
+  const toggleSelectAllPlanning = (val: boolean) => {
+    setPlanningCampaigns(prev => prev.map(c => ({ ...c, selected: val })));
+  };
+
+  const [planningHistory, setPlanningHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('gerenciie_planning_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const savePlanningSimulation = () => {
+    if (planningDiagnostic.budget === 0 && planningDiagnostic.sales === 0) return;
+    
+    const newEntry = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: new Date().toLocaleDateString('pt-BR'),
+      spend: planningDiagnostic.budget,
+      revenue: planningDiagnostic.revenue,
+      roas: planningDiagnostic.roas,
+      cpa: planningDiagnostic.cpa,
+      profit: planningDiagnostic.profit
+    };
+    
+    setPlanningHistory([newEntry, ...planningHistory]);
+  };
+
+  const [planningFilter, setPlanningFilter] = useState<'all' | 'top' | 'middle' | 'bottom'>('all');
+
   const [platform, setPlatform] = useState<Platform>(() => {
     const saved = localStorage.getItem('gerenciie_platform');
     return (saved as Platform) || Platform.DROPSHIPPING;
   });
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'daily' | 'compass' | 'simulation'>(() => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'daily' | 'compass' | 'simulation' | 'planning'>(() => {
     const saved = localStorage.getItem('gerenciie_active_tab');
     return (saved as any) || 'overview';
   });
@@ -143,6 +215,18 @@ export default function App() {
   }, [scaleMultiplier]);
 
   useEffect(() => {
+    localStorage.setItem('gerenciie_planning_data', JSON.stringify(planningData));
+  }, [planningData]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_planning_campaigns', JSON.stringify(planningCampaigns));
+  }, [planningCampaigns]);
+
+  useEffect(() => {
+    localStorage.setItem('gerenciie_planning_history', JSON.stringify(planningHistory));
+  }, [planningHistory]);
+
+  useEffect(() => {
     if (platform === Platform.SHOPEE) {
       setPricingData(prev => ({
         ...prev,
@@ -174,6 +258,54 @@ export default function App() {
   }, [platform]);
 
   const currentResult = useMemo(() => calculatePricing(pricingData, pricingData.desiredMarkup, platform), [pricingData, platform]);
+
+  const planningDiagnostic = useMemo(() => {
+    const selectedCamps = planningCampaigns.filter(c => c.selected && c.active);
+    
+    const budget = selectedCamps.reduce((acc, c) => acc + Number(c.spend || 0), 0);
+    const impressions = selectedCamps.reduce((acc, c) => acc + Number(c.impressions || 0), 0);
+    const clicks = selectedCamps.reduce((acc, c) => acc + Number(c.clicks || 0), 0);
+    const atc = selectedCamps.reduce((acc, c) => acc + Number(c.atc || 0), 0);
+    const ic = selectedCamps.reduce((acc, c) => acc + Number(c.ic || 0), 0);
+    const sales = selectedCamps.reduce((acc, c) => acc + Number(c.sales || 0), 0);
+    
+    const revenue = sales * currentResult.finalPrice;
+    
+    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+    const cvr = clicks > 0 ? (sales / clicks) * 100 : 0;
+    const atcRate = clicks > 0 ? (atc / clicks) * 100 : 0;
+    const icRate = atc > 0 ? (ic / atc) * 100 : 0;
+    const cpm = impressions > 0 ? (budget / impressions) * 1000 : 0;
+    const cpc = clicks > 0 ? budget / clicks : 0;
+
+    // Custos variáveis unitários
+    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
+    
+    const totalCosts = (unitVariableCostsNoAds * sales) + budget + (pricingData.fixedOpCost / 30 * (selectedCamps.length || 1)); 
+    const profit = revenue - totalCosts;
+    const cpa = sales > 0 ? budget / sales : 0;
+    const roas = budget > 0 ? revenue / budget : 0;
+
+    const issues = [];
+    
+    if (selectedCamps.length === 0) {
+      return { budget: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0, profit: 0, cpa: 0, roas: 0, cpc: 0, ctr: 0, cvr: 0, atcRate: 0, icRate: 0, cpm: 0, issues: [], dailyData: [], scaleGuidance: 'Selecione entradas para analisar.' };
+    }
+
+    // Diagnóstico
+    if (ctr < 1) issues.push({ type: 'error', label: 'CTR Baixo', msg: 'Anúncio pouco atraente. Melhore criativo.' });
+    if (atcRate < 5) issues.push({ type: 'error', label: 'ATC Baixo', msg: 'Muitos cliques, poucas intenções. Melhore a oferta.' });
+    if (cvr < 1) issues.push({ type: 'error', label: 'CVR Crítica', msg: 'Sua conversão final está drenando lucro.' });
+    if (cpa > currentResult.maxCPA) issues.push({ type: 'error', label: 'CPA ALTO', msg: 'Você está no prejuízo por venda.' });
+
+    // Orientação
+    let scaleGuidance = 'Mantenha os testes.';
+    if (profit > 0 && roas > 3 && cpa < currentResult.cpaIdeal) scaleGuidance = 'ESCALA LIBERADA: Aumente o budget em 20%.';
+    else if (profit < 0) scaleGuidance = 'ALERTA: Reduza o budget ou congele a campanha.';
+    else if (cpa > currentResult.maxCPA) scaleGuidance = 'PERIGO: CPA furando o breakeven.';
+
+    return { budget, impressions, clicks, atc, ic, sales, revenue, profit, cpa, roas, cpc, ctr, cvr, atcRate, icRate, cpm, issues, dailyData: [], scaleGuidance };
+  }, [planningCampaigns, planningFilter, currentResult, pricingData]);
 
   const dailyMetrics = useMemo(() => {
     const { spend, revenue, sales, impressions, clicks, atc } = dailyAds;
@@ -291,34 +423,168 @@ export default function App() {
   if (!isAuthenticated && !showLogin) {
     return (
       <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 overflow-x-hidden">
-        <nav className="fixed top-0 w-full z-50 px-10 py-6 flex justify-between items-center backdrop-blur-md border-b border-white/5">
+        {/* Navbar */}
+        <nav className="fixed top-0 w-full z-50 px-6 md:px-10 py-6 flex justify-between items-center backdrop-blur-md border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 blue-gradient rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
               <Globe size={20} />
             </div>
             <span className="font-black text-xl tracking-tighter italic">GERENCIIE<span className="text-blue-500">PRO</span></span>
           </div>
-          <button onClick={() => setShowLogin(true)} className="px-8 py-3 rounded-full font-bold text-sm bg-white text-black hover:bg-blue-500 hover:text-white transition-all shadow-xl shadow-white/5">
-            Acessar Plataforma
+          <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <a href="#features" className="hover:text-white transition-colors">Recursos</a>
+            <a href="#stats" className="hover:text-white transition-colors">Resultados</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Planos</a>
+          </div>
+          <button onClick={() => setShowLogin(true)} className="px-6 md:px-8 py-3 rounded-full font-bold text-sm bg-white text-black hover:bg-blue-500 hover:text-white transition-all shadow-xl shadow-white/5">
+            Entrar
           </button>
         </nav>
-        <section className="relative pt-40 pb-20 px-10 max-w-7xl mx-auto flex flex-col items-center text-center">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
+
+        {/* Hero Section */}
+        <section className="relative pt-40 pb-32 px-6 md:px-10 max-w-7xl mx-auto flex flex-col items-center text-center">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] md:w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 text-blue-400 text-[10px] font-black uppercase tracking-widest mb-8 animate-pulse">
             <Sparkles size={12}/> O Futuro do E-commerce High-Ticket
           </div>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tight leading-[0.95] mb-8 italic">
+          <h1 className="text-5xl md:text-8xl font-black tracking-tight leading-[0.95] mb-8 italic">
             DOMINE SUAS <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600">MARGENS AGORA</span>
           </h1>
-          <p className="text-slate-200 text-lg max-w-2xl font-medium mb-12 leading-relaxed">
+          <p className="text-slate-400 text-lg md:text-xl max-w-2xl font-medium mb-12 leading-relaxed">
             A primeira calculadora com inteligência CFO integrada. Pare de queimar dinheiro em anúncios e comece a escalar com lucro real no bolso.
           </p>
           <div className="flex flex-col md:flex-row items-center gap-6">
             <button onClick={() => setShowLogin(true)} className="px-12 py-5 bg-blue-600 rounded-full font-black text-sm uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-blue-500/40">
               <Rocket size={18}/> Iniciar Teste Grátis
             </button>
+            <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+              <ShieldCheck size={16} className="text-emerald-500"/> Sem cartão de crédito
+            </div>
+          </div>
+
+          {/* Dashboard Preview Mockup */}
+          <div className="mt-24 relative w-full max-w-5xl group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[40px] blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+            <div className="relative bg-slate-900 border border-white/10 rounded-[40px] overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
+               <div className="flex flex-col items-center gap-4 opacity-40">
+                  <LayoutDashboard size={64} className="text-blue-500" />
+                  <p className="text-xs font-black uppercase tracking-[0.3em]">Dashboard Preview</p>
+               </div>
+               {/* Floating elements for visual interest */}
+               <div className="absolute top-10 left-10 p-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md animate-bounce-slow">
+                  <div className="w-12 h-2 bg-blue-500 rounded-full mb-2"></div>
+                  <div className="w-8 h-2 bg-white/20 rounded-full"></div>
+               </div>
+               <div className="absolute bottom-10 right-10 p-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md animate-pulse-slow">
+                  <div className="w-16 h-4 bg-emerald-500/20 text-emerald-500 text-[8px] font-black rounded-full flex items-center justify-center">PROFITABLE</div>
+               </div>
+            </div>
           </div>
         </section>
+
+        {/* Stats Section */}
+        <section id="stats" className="py-24 bg-white/5 border-y border-white/5">
+           <div className="max-w-7xl mx-auto px-10 grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
+              <div>
+                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">10k+</h4>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Usuários Ativos</p>
+              </div>
+              <div>
+                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">R$ 50M+</h4>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Margem Gerenciada</p>
+              </div>
+              <div>
+                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">98%</h4>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Precisão de Dados</p>
+              </div>
+              <div>
+                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">24/7</h4>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Suporte Especializado</p>
+              </div>
+           </div>
+        </section>
+
+        {/* Features Section */}
+        <section id="features" className="py-32 px-10 max-w-7xl mx-auto">
+           <div className="text-center mb-20">
+              <h2 className="text-4xl md:text-5xl font-black mb-6 italic tracking-tight">TUDO QUE VOCÊ PRECISA <br /> <span className="text-blue-500">PARA ESCALAR</span></h2>
+              <p className="text-slate-400 font-medium max-w-xl mx-auto">Ferramentas profissionais desenhadas por quem opera milhões no e-commerce todos os meses.</p>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <FeatureCard 
+                icon={<LayoutDashboard size={24}/>} 
+                title="Calculadora CFO" 
+                desc="Cálculo de margem real com todas as taxas de gateway, impostos e custos fixos."
+              />
+              <FeatureCard 
+                icon={<Activity size={24}/>} 
+                title="Métricas Diárias" 
+                desc="Acompanhe ROAS, CPA e Lucro diário em uma interface limpa e objetiva."
+              />
+              <FeatureCard 
+                icon={<ShieldCheck size={24}/>} 
+                title="Bússola de KPIs" 
+                desc="Saiba exatamente seus limites de CPA, ATC e IC para não queimar dinheiro."
+              />
+              <FeatureCard 
+                icon={<Zap size={24}/>} 
+                title="Simulador de Escala" 
+                desc="Projete seu faturamento e lucro ao aumentar o investimento em anúncios."
+              />
+           </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section id="pricing" className="py-32 px-10 max-w-7xl mx-auto">
+           <div className="bg-blue-600 rounded-[50px] p-12 md:p-20 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-12">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/2" />
+              <div className="relative z-10 max-w-md">
+                 <h2 className="text-4xl md:text-5xl font-black text-white mb-6 italic tracking-tight leading-none">PRONTO PARA <br /> O PRÓXIMO NÍVEL?</h2>
+                 <p className="text-blue-100 font-medium mb-8">Junte-se aos maiores players do mercado e tenha o controle total da sua operação na palma da mão.</p>
+                 <ul className="space-y-4 mb-10">
+                    <li className="flex items-center gap-3 text-sm font-bold text-white">
+                       <CheckCircle2 size={18} className="text-blue-200" /> Acesso vitalício às ferramentas
+                    </li>
+                    <li className="flex items-center gap-3 text-sm font-bold text-white">
+                       <CheckCircle2 size={18} className="text-blue-200" /> Atualizações constantes
+                    </li>
+                    <li className="flex items-center gap-3 text-sm font-bold text-white">
+                       <CheckCircle2 size={18} className="text-blue-200" /> Comunidade exclusiva
+                    </li>
+                 </ul>
+              </div>
+              <div className="relative z-10 bg-white rounded-[40px] p-10 text-black w-full max-w-sm shadow-2xl">
+                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Plano Anual</p>
+                 <div className="flex items-baseline gap-1 mb-6">
+                    <span className="text-2xl font-black">R$</span>
+                    <span className="text-6xl font-black tracking-tighter">97</span>
+                    <span className="text-xl font-bold text-slate-400">/mês</span>
+                 </div>
+                 <button onClick={() => setShowLogin(true)} className="w-full py-5 blue-gradient text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 transition-all">
+                    Começar Agora
+                 </button>
+                 <p className="text-center text-[9px] text-slate-400 font-bold mt-6 uppercase tracking-widest">Garantia de 7 dias ou seu dinheiro de volta</p>
+              </div>
+           </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-20 px-10 border-t border-white/5">
+           <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 blue-gradient rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <Globe size={16} />
+                </div>
+                <span className="font-black text-lg tracking-tighter italic">GERENCIIE<span className="text-blue-500">PRO</span></span>
+              </div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2026 Gerenciie Pro. Todos os direitos reservados.</p>
+              <div className="flex items-center gap-6">
+                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><ImageIcon size={20}/></a>
+                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><Globe size={20}/></a>
+                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><Megaphone size={20}/></a>
+              </div>
+           </div>
+        </footer>
       </div>
     );
   }
@@ -369,6 +635,7 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto custom-scrollbar">
           <NavItem icon={<LayoutDashboard size={18} />} label="Calculadora" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
           <NavItem icon={<Activity size={18} />} label="Métricas Diárias" active={activeTab === 'daily'} onClick={() => setActiveTab('daily')} />
+          <NavItem icon={<Target size={18} />} label="Planejamento Ads" active={activeTab === 'planning'} onClick={() => setActiveTab('planning')} />
           <NavItem icon={<ShieldCheck size={18} />} label="Bússola (KPIs)" active={activeTab === 'compass'} onClick={() => setActiveTab('compass')} />
           <NavItem icon={<Zap size={18} />} label="Simulação Escala" active={activeTab === 'simulation'} onClick={() => setActiveTab('simulation')} />
           <NavItem icon={<FileText size={18} />} label="DRE" active={activeTab === 'dre'} onClick={() => setActiveTab('dre')} />
@@ -838,6 +1105,311 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'planning' && (
+            <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-32">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-4xl font-black text-black tracking-tight italic">Simulador de Planejamento</h2>
+                  <p className="text-slate-900 font-bold uppercase text-[10px] tracking-[0.1em]">ORGANIZE SUAS METAS E PREVEJA O LUCRO</p>
+                </div>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={addPlanningCampaign}
+                    className="px-6 py-2.5 bg-black text-white rounded-2xl text-[10px] font-black tracking-widest uppercase hover:bg-slate-800 transition-all flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    ADICIONAR DIA/CAMPANHA
+                  </button>
+                  <div className="flex gap-1 bg-white p-1 rounded-2xl shadow-sm border border-slate-100 h-fit">
+                    {['all', 'top', 'middle', 'bottom'].map((f: any) => (
+                      <button 
+                        key={f}
+                        onClick={() => setPlanningFilter(f)}
+                        className={`px-4 py-2 rounded-xl text-[9px] font-black tracking-widest uppercase transition-all ${planningFilter === f ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-800 hover:bg-slate-50'}`}
+                      >
+                        {f === 'all' ? 'Ver Tudo' : f === 'top' ? 'Topo' : f === 'middle' ? 'Meio' : 'Fundo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela de Campanhas Estilo Image */}
+              <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[1200px]">
+                    <thead>
+                      <tr className="bg-slate-50/50">
+                        <th className="p-4 w-12 text-center">
+                          <input 
+                            type="checkbox" 
+                            className="rounded accent-blue-600" 
+                            checked={planningCampaigns.length > 0 && planningCampaigns.every(c => c.selected)}
+                            onChange={(e) => toggleSelectAllPlanning(e.target.checked)}
+                          />
+                        </th>
+                        <th className="p-4 w-16 text-center text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100">ON</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 whitespace-nowrap">ID/Nome da Campanha</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Investido ({currentSymbol})</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Impressões</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Cliques Link</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Taxa ATC (%)</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Add Carrinho</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Checkouts</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">CVR (%)</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 text-right whitespace-nowrap">Vendas</th>
+                        <th className="p-4 text-[10px] font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {planningCampaigns.map((camp) => (
+                        <tr key={camp.id} className={`hover:bg-slate-50/50 transition-colors group ${!camp.active ? 'opacity-40' : ''}`}>
+                          <td className="p-4 text-center">
+                            <input 
+                              type="checkbox" 
+                              className="rounded accent-blue-600" 
+                              checked={!!camp.selected} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { selected: e.target.checked })}
+                            />
+                          </td>
+                          <td className="p-4">
+                            <button 
+                              onClick={() => updatePlanningCampaign(camp.id, { active: !camp.active })}
+                              className={`w-8 h-4 rounded-full relative transition-all mx-auto ${camp.active ? 'bg-blue-600' : 'bg-slate-400'}`}
+                            >
+                              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${camp.active ? 'right-0.5' : 'left-0.5'}`} />
+                            </button>
+                          </td>
+                          <td className="p-4">
+                            <input 
+                              type="text" 
+                              value={camp.name} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { name: e.target.value })}
+                              className="w-full bg-transparent text-xs font-black text-blue-700 border-none p-0 focus:ring-0"
+                            />
+                          </td>
+                          <td className="p-2">
+                             <input 
+                              type="number" 
+                              value={camp.spend} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { spend: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg transition-all"
+                            />
+                          </td>
+                          <td className="p-2">
+                             <input 
+                              type="number" 
+                              value={camp.impressions} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { impressions: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              value={camp.clicks} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { clicks: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
+                            />
+                          </td>
+                          <td className="p-4 text-right text-xs font-black text-slate-800">
+                            {camp.clicks > 0 ? ((camp.atc / camp.clicks) * 100).toFixed(1) : 0}%
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              value={camp.atc} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { atc: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              value={camp.ic} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { ic: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
+                            />
+                          </td>
+                          <td className="p-4 text-right text-xs font-black text-slate-800">
+                             {camp.clicks > 0 ? ((camp.sales / camp.clicks) * 100).toFixed(1) : 0}%
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="number" 
+                              value={camp.sales} 
+                              onChange={(e) => updatePlanningCampaign(camp.id, { sales: Number(e.target.value) })}
+                              className="w-full bg-transparent text-right text-xs font-black text-slate-800 border-none p-2 focus:ring-0 focus:bg-white rounded-lg"
+                            />
+                          </td>
+                          <td className="p-4 text-center">
+                            <button onClick={() => removePlanningCampaign(camp.id)} className="text-slate-300 hover:text-rose-500 transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Calculadora Tempo Real (Estilo Image) */}
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex flex-col">
+                        <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Calculadora</h3>
+                        <p className="text-xs font-black italic text-black">TEMPO REAL</p>
+                      </div>
+                      <div className="flex gap-1 bg-slate-50 p-1 rounded-lg">
+                        {[
+                          { id: 'all', label: 'TUDO' },
+                          { id: 'top', label: 'TOPO' },
+                          { id: 'middle', label: 'MEIO' },
+                          { id: 'bottom', label: 'FUNDO' }
+                        ].map((t) => (
+                          <button 
+                            key={t.id} 
+                            onClick={() => setPlanningFilter(t.id as any)}
+                            className={`px-2 py-1 rounded text-[8px] font-bold transition-all ${planningFilter === t.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-600'}`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      {(planningFilter === 'all' || planningFilter === 'top') && (
+                        <>
+                          <MetricCardSmall label="CTR" value={`${planningDiagnostic.ctr.toFixed(2)}%`} icon={<MousePointer2 size={12}/>} />
+                          <MetricCardSmall label="CPC" value={formatCurrency(planningDiagnostic.cpc, pricingData.currency)} icon={<MousePointerClick size={12}/>} />
+                          <MetricCardSmall label="CPM" value={formatCurrency(planningDiagnostic.cpm, pricingData.currency)} icon={<Eye size={12}/>} />
+                        </>
+                      )}
+                      
+                      {(planningFilter === 'all' || planningFilter === 'middle') && (
+                        <>
+                          <MetricCardSmall label="TAXA ATC" value={`${planningDiagnostic.atcRate.toFixed(2)}%`} icon={<ShoppingCart size={12}/>} />
+                          <MetricCardSmall label="ATC" value={Math.floor(planningDiagnostic.atc)} icon={<ShoppingCart size={12}/>} />
+                          <MetricCardSmall label="IC" value={Math.floor(planningDiagnostic.ic)} icon={<CreditCard size={12}/>} />
+                        </>
+                      )}
+                      
+                      {(planningFilter === 'all' || planningFilter === 'bottom') && (
+                        <>
+                          <MetricCardSmall label="ROAS" value={planningDiagnostic.roas.toFixed(2)} icon={<TrendingUp size={12}/>} />
+                          <MetricCardSmall label="CPA" value={formatCurrency(planningDiagnostic.cpa, pricingData.currency)} icon={<Target size={12}/>} />
+                          <MetricCardSmall label="CVR" value={`${planningDiagnostic.cvr.toFixed(2)}%`} icon={<ShoppingBag size={12}/>} />
+                        </>
+                      )}
+                    </div>
+
+                    <div className="mt-6 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex justify-between items-center">
+                      <div>
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Lucro Est. (DIA)</p>
+                        <p className={`text-xl font-black ${planningDiagnostic.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {formatCurrency(planningDiagnostic.profit / (planningCampaigns.filter(c => c.selected && c.active).length || 30), pricingData.currency)}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={savePlanningSimulation}
+                        className="bg-emerald-600 text-white p-2 rounded-xl hover:bg-emerald-700 transition-all shadow-md active:scale-95"
+                        title="Salvar no Histórico"
+                      >
+                        <Save size={16} />
+                      </button>
+                    </div>
+
+                    <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Navigation size={14} className="text-blue-600" />
+                        <p className="text-[9px] font-black text-slate-800 uppercase tracking-widest">Orientação de Escala</p>
+                      </div>
+                      <p className="text-[10px] font-black text-slate-700 italic">
+                        {planningDiagnostic.scaleGuidance}
+                      </p>
+                      {planningDiagnostic.issues.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {planningDiagnostic.issues.slice(0, 2).map((issue, idx) => (
+                            <div key={idx} className="flex items-center gap-1 text-rose-500">
+                              <XCircle size={10} />
+                              <span className="text-[8px] font-black uppercase">{issue.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Histórico Recente (Estilo Image) */}
+                <div className="lg:col-span-8">
+                  <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm min-h-[400px] flex flex-col">
+                    <div className="flex justify-between items-center mb-8">
+                      <div className="flex items-center gap-3">
+                        <History size={24} className="text-blue-600" />
+                        <h3 className="text-xl font-black italic">HISTÓRICO RECENTE</h3>
+                      </div>
+                      <button className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
+                        <Download size={14} />
+                        EXPORTAR CSV
+                      </button>
+                    </div>
+
+                    <div className="flex-1">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest">DATA</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest">GASTO</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest text-right">RECEITA</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest text-right">ROAS</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest text-right">CPA</th>
+                            <th className="pb-4 text-[10px] font-black text-slate-800 uppercase tracking-widest text-right">LUCRO EST.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {planningHistory.length > 0 ? (
+                            planningHistory.map((h, i) => (
+                              <tr key={i} className="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0 group">
+                                <td className="py-4 text-xs font-black text-slate-700">{h.date}</td>
+                                <td className="py-4 text-xs font-black text-slate-900">{formatCurrency(h.spend, pricingData.currency)}</td>
+                                <td className="py-4 text-xs font-black text-emerald-700 text-right">{formatCurrency(h.revenue, pricingData.currency)}</td>
+                                <td className="py-4 text-xs font-black text-blue-700 text-right">{h.roas.toFixed(2)}x</td>
+                                <td className="py-4 text-xs font-black text-slate-800 text-right">{formatCurrency(h.cpa, pricingData.currency)}</td>
+                                <td className={`py-4 text-xs font-black text-right ${h.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                  {formatCurrency(h.profit, pricingData.currency)}
+                                </td>
+                                <td className="py-4 text-right pr-2">
+                                  <button 
+                                    onClick={() => setPlanningHistory(planningHistory.filter((_, idx) => idx !== i))}
+                                    className="text-slate-200 hover:text-rose-500 transition-colors"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="py-20 text-center">
+                                <p className="text-xl font-black text-slate-300 italic mb-2">Nenhum dado registrado para este produto.</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">Seus registros salvos aparecerão aqui</p>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'compass' && (
              <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
                 <div className="flex flex-col gap-1">
@@ -1047,6 +1619,16 @@ function PlatformButton({ label, active, onClick }: any) {
   );
 }
 
+const MetricCardSmall = ({ label, value, icon, trend }: { label: string; value: string | number; icon: React.ReactNode; trend?: 'up' | 'down' }) => (
+  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 group hover:border-blue-200 transition-all">
+    <div className="flex items-center gap-1.5 mb-1.5 text-slate-800 group-hover:text-blue-600 transition-colors">
+      {icon}
+      <span className="text-[8px] font-black uppercase tracking-widest truncate">{label}</span>
+    </div>
+    <p className="text-xs font-black text-black tracking-tight">{value}</p>
+  </div>
+);
+
 function Section({ title, icon, children }: any) {
   return (
     <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 space-y-5">
@@ -1100,6 +1682,18 @@ function DRERow({ label, value, currency, isNegative, isBold }: { label: string,
        <span className={isNegative ? 'text-[#EF4444]' : ''}>
          {isNegative ? '-' : ''}{formatCurrency(value, currency)}
        </span>
+    </div>
+  );
+}
+
+function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
+  return (
+    <div className="bg-white/5 border border-white/10 p-8 rounded-[32px] hover:bg-white/10 transition-all group">
+       <div className="w-12 h-12 blue-gradient rounded-2xl flex items-center justify-center text-white mb-6 shadow-xl shadow-blue-500/20 group-hover:scale-110 transition-transform">
+          {icon}
+       </div>
+       <h3 className="text-lg font-black italic mb-3 tracking-tight">{title}</h3>
+       <p className="text-slate-400 text-sm leading-relaxed font-medium">{desc}</p>
     </div>
   );
 }
