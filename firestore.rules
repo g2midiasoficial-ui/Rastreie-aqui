@@ -12,49 +12,45 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return (isSignedIn() && request.auth.uid == userId) || userId == 'public_user';
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Users collection
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) 
-        && request.resource.data.keys().hasAll(['uid', 'email', 'createdAt'])
-        && request.resource.data.keys().size() == 3;
-    }
-
     // Generic validation for shared fields (userId)
-    function validateUserId() {
-      return request.resource.data.userId == request.auth.uid;
+    function validateUserId(data) {
+      return (isSignedIn() && data.userId == request.auth.uid) || data.userId == 'public_user';
     }
 
     // Products collection
     match /products/{productId} {
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && validateUserId() && isValidId(productId);
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && validateUserId();
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isPublicOrOwner(resource.data.userId);
+      allow get: if isPublicOrOwner(resource.data.userId);
+      allow create: if validateUserId(request.resource.data) && isValidId(productId);
+      allow update: if isPublicOrOwner(resource.data.userId) && validateUserId(request.resource.data);
+      allow delete: if isPublicOrOwner(resource.data.userId);
     }
 
     // Campaigns collection
     match /campaigns/{campaignId} {
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && validateUserId() && isValidId(campaignId);
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && validateUserId();
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isPublicOrOwner(resource.data.userId);
+      allow get: if isPublicOrOwner(resource.data.userId);
+      allow create: if validateUserId(request.resource.data) && isValidId(campaignId);
+      allow update: if isPublicOrOwner(resource.data.userId) && validateUserId(request.resource.data);
+      allow delete: if isPublicOrOwner(resource.data.userId);
     }
 
     // Planning History collection
     match /planning_history/{historyId} {
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && validateUserId() && isValidId(historyId);
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isPublicOrOwner(resource.data.userId);
+      allow create: if validateUserId(request.resource.data) && isValidId(historyId);
+      allow delete: if isPublicOrOwner(resource.data.userId);
+    }
+
+    function isPublicOrOwner(userId) {
+      return userId == 'public_user' || (isSignedIn() && request.auth.uid == userId);
     }
   }
 }

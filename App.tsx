@@ -27,9 +27,7 @@ import {
 import { 
   signInWithPopup, 
   GoogleAuthProvider, 
-  onAuthStateChanged, 
   signOut,
-  User as FirebaseUser
 } from 'firebase/auth';
 import { 
   collection, 
@@ -73,10 +71,6 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
     },
     operationType,
     path
@@ -91,16 +85,8 @@ type ProductStatus = 'Mineração' | 'Teste' | 'Validação' | 'Escala' | 'Desco
 
 
 export default function App() {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [showLogin, setShowLogin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  
-
   const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
-
   const [planningHistory, setPlanningHistory] = useState<any[]>([]);
-
   const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
   const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning'>('overview');
   
@@ -133,49 +119,27 @@ export default function App() {
 
   const [scaleMultiplier, setScaleMultiplier] = useState<number>(2);
 
-  // Auth Effect
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setIsAuthenticated(!!u);
-      setIsLoading(false);
-      if (u) {
-        // Test connection
-        const testConnection = async () => {
-          try {
-            await getDocFromServer(doc(db, 'test', 'connection'));
-          } catch (error) {
-            if(error instanceof Error && error.message.includes('the client is offline')) {
-              console.error("Please check your Firebase configuration.");
-            }
-          }
-        };
-        testConnection();
-      }
-    });
-    return () => unsubscribe();
-  }, []);
+  // Public User ID for persistence without login
+  const PUBLIC_USER_ID = 'public_user';
 
   // Firestore Listeners
   useEffect(() => {
-    if (!user) return;
-
     // Listen for products
-    const productsQuery = query(collection(db, 'products'), where('userId', '==', user.uid));
+    const productsQuery = query(collection(db, 'products'), where('userId', '==', PUBLIC_USER_ID));
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
       const prods = snapshot.docs.map(d => d.data() as PricingData);
       setSavedProducts(prods);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
 
     // Listen for campaigns
-    const campaignsQuery = query(collection(db, 'campaigns'), where('userId', '==', user.uid));
+    const campaignsQuery = query(collection(db, 'campaigns'), where('userId', '==', PUBLIC_USER_ID));
     const unsubscribeCampaigns = onSnapshot(campaignsQuery, (snapshot) => {
       const camps = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setPlanningCampaigns(camps);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'campaigns'));
 
     // Listen for planning history
-    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', user.uid), orderBy('date', 'desc'));
+    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', PUBLIC_USER_ID), orderBy('date', 'desc'));
     const unsubscribeHistory = onSnapshot(historyQuery, (snapshot) => {
       const hist = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setPlanningHistory(hist);
@@ -186,12 +150,11 @@ export default function App() {
       unsubscribeCampaigns();
       unsubscribeHistory();
     };
-  }, [user]);
+  }, []);
 
   const addPlanningCampaign = async (phase: 'Teste' | 'Validação' | 'Escala' = 'Teste') => {
-    if (!user) return;
     const newCamp = {
-      userId: user.uid,
+      userId: PUBLIC_USER_ID,
       name: `${phase} - ${new Date().toLocaleDateString('pt-BR')}`,
       spend: 0,
       impressions: 0,
@@ -213,7 +176,6 @@ export default function App() {
   };
 
   const updatePlanningCampaign = async (id: string, updates: any) => {
-    if (!user) return;
     try {
       await setDoc(doc(db, 'campaigns', id), updates, { merge: true });
     } catch (error) {
@@ -222,7 +184,6 @@ export default function App() {
   };
 
   const removePlanningCampaign = async (id: string) => {
-    if (!user) return;
     try {
       await deleteDoc(doc(db, 'campaigns', id));
     } catch (error) {
@@ -231,7 +192,6 @@ export default function App() {
   };
 
   const toggleSelectAllPlanning = async (val: boolean) => {
-    if (!user) return;
     // For large operations, a batch or sequential updates would be needed. 
     // Simplified for this context:
     planningCampaigns.forEach(c => {
@@ -240,11 +200,10 @@ export default function App() {
   };
 
   const savePlanningSimulation = async () => {
-    if (!user) return;
     if (planningDiagnostic.budget === 0 && planningDiagnostic.sales === 0) return;
     
     const newEntry = {
-      userId: user.uid,
+      userId: PUBLIC_USER_ID,
       date: new Date().toLocaleDateString('pt-BR'),
       spend: planningDiagnostic.budget,
       revenue: planningDiagnostic.revenue,
@@ -262,62 +221,31 @@ export default function App() {
   };
 
   const saveProduct = async () => {
-    if (!user || !pricingData.productName) return;
+    if (!pricingData.productName) return;
     
     const productId = pricingData.productName.replace(/[^a-zA-Z0-9]/g, '_');
     try {
-      await setDoc(doc(db, 'products', `${user.uid}_${productId}`), {
+      await setDoc(doc(db, 'products', `${PUBLIC_USER_ID}_${productId}`), {
         ...pricingData,
-        userId: user.uid,
+        userId: PUBLIC_USER_ID,
         updatedAt: serverTimestamp()
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `products/${user.uid}_${productId}`);
+      handleFirestoreError(error, OperationType.WRITE, `products/${PUBLIC_USER_ID}_${productId}`);
     }
   };
 
   const deleteProduct = async (name: string) => {
-    if (!user) return;
     const productId = name.replace(/[^a-zA-Z0-9]/g, '_');
     try {
-      await deleteDoc(doc(db, 'products', `${user.uid}_${productId}`));
+      await deleteDoc(doc(db, 'products', `${PUBLIC_USER_ID}_${productId}`));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `products/${user.uid}_${productId}`);
+      handleFirestoreError(error, OperationType.DELETE, `products/${PUBLIC_USER_ID}_${productId}`);
     }
   };
 
   const loadProduct = (product: PricingData) => {
     setPricingData({ ...product });
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const provider = new GoogleAuthProvider();
-    try {
-      // Use popup for better UX in most environments. 
-      // If blocked, we catch and log it for debug.
-      const result = await signInWithPopup(auth, provider);
-      if (result.user) {
-        setShowLogin(false);
-      }
-    } catch (error: any) {
-      console.error('Login error:', error);
-      if (error.code === 'auth/popup-blocked') {
-        alert('O popup de login foi bloqueado pelo seu navegador. Por favor, habilite popups para continuar.');
-      } else if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
-        // User closed the popup, do nothing or show a soft hint
-      } else {
-        alert('Ocorreu um erro ao tentar fazer login. Tente novamente ou verifique sua conexão.');
-      }
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
   };
 
   useEffect(() => {
@@ -419,214 +347,6 @@ export default function App() {
 
   const currentSymbol = getCurrencySymbol(pricingData.currency);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user && !showLogin) {
-    return (
-      <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 overflow-x-hidden">
-        {/* Navbar */}
-        <nav className="fixed top-0 w-full z-50 px-6 md:px-10 py-6 flex justify-between items-center backdrop-blur-md border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 blue-gradient rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Globe size={20} />
-            </div>
-            <span className="font-black text-xl tracking-tighter italic">GERENCIIE<span className="text-blue-500">PRO</span></span>
-          </div>
-          <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            <a href="#features" className="hover:text-white transition-colors">Recursos</a>
-            <a href="#stats" className="hover:text-white transition-colors">Resultados</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Planos</a>
-          </div>
-          <button onClick={() => setShowLogin(true)} className="px-6 md:px-8 py-3 rounded-full font-bold text-sm bg-white text-black hover:bg-blue-500 hover:text-white transition-all shadow-xl shadow-white/5">
-            Entrar
-          </button>
-        </nav>
-
-        {/* Hero Section */}
-        <section className="relative pt-40 pb-32 px-6 md:px-10 max-w-7xl mx-auto flex flex-col items-center text-center">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] md:w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 text-blue-400 text-[10px] font-black uppercase tracking-widest mb-8 animate-pulse">
-            <Sparkles size={12}/> O Futuro do E-commerce High-Ticket
-          </div>
-          <h1 className="text-5xl md:text-8xl font-black tracking-tight leading-[0.95] mb-8 italic">
-            DOMINE SUAS <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600">MARGENS AGORA</span>
-          </h1>
-          <p className="text-slate-400 text-lg md:text-xl max-w-2xl font-medium mb-12 leading-relaxed">
-            A primeira calculadora com inteligência CFO integrada. Pare de queimar dinheiro em anúncios e comece a escalar com lucro real no bolso.
-          </p>
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <button onClick={() => setShowLogin(true)} className="px-12 py-5 bg-blue-600 rounded-full font-black text-sm uppercase tracking-widest flex items-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-blue-500/40">
-              <Rocket size={18}/> Iniciar Teste Grátis
-            </button>
-            <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-              <ShieldCheck size={16} className="text-emerald-500"/> Sem cartão de crédito
-            </div>
-          </div>
-
-          {/* Dashboard Preview Mockup */}
-          <div className="mt-24 relative w-full max-w-5xl group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[40px] blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-            <div className="relative bg-slate-900 border border-white/10 rounded-[40px] overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
-               <div className="flex flex-col items-center gap-4 opacity-40">
-                  <LayoutDashboard size={64} className="text-blue-500" />
-                  <p className="text-xs font-black uppercase tracking-[0.3em]">Dashboard Preview</p>
-               </div>
-               {/* Floating elements for visual interest */}
-               <div className="absolute top-10 left-10 p-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md animate-bounce-slow">
-                  <div className="w-12 h-2 bg-blue-500 rounded-full mb-2"></div>
-                  <div className="w-8 h-2 bg-white/20 rounded-full"></div>
-               </div>
-               <div className="absolute bottom-10 right-10 p-4 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md animate-pulse-slow">
-                  <div className="w-16 h-4 bg-emerald-500/20 text-emerald-500 text-[8px] font-black rounded-full flex items-center justify-center">PROFITABLE</div>
-               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Stats Section */}
-        <section id="stats" className="py-24 bg-white/5 border-y border-white/5">
-           <div className="max-w-7xl mx-auto px-10 grid grid-cols-2 md:grid-cols-4 gap-12 text-center">
-              <div>
-                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">10k+</h4>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Usuários Ativos</p>
-              </div>
-              <div>
-                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">R$ 50M+</h4>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Margem Gerenciada</p>
-              </div>
-              <div>
-                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">98%</h4>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Precisão de Dados</p>
-              </div>
-              <div>
-                 <h4 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter italic text-blue-500">24/7</h4>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Suporte Especializado</p>
-              </div>
-           </div>
-        </section>
-
-        {/* Features Section */}
-        <section id="features" className="py-32 px-10 max-w-7xl mx-auto">
-           <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl font-black mb-6 italic tracking-tight">TUDO QUE VOCÊ PRECISA <br /> <span className="text-blue-500">PARA ESCALAR</span></h2>
-              <p className="text-slate-400 font-medium max-w-xl mx-auto">Ferramentas profissionais desenhadas por quem opera milhões no e-commerce todos os meses.</p>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              <FeatureCard 
-                icon={<LayoutDashboard size={24}/>} 
-                title="Calculadora CFO" 
-                desc="Cálculo de margem real com todas as taxas de gateway, impostos e custos fixos."
-              />
-              <FeatureCard 
-                icon={<ShieldCheck size={24}/>} 
-                title="Bússola de KPIs" 
-                desc="Saiba exatamente seus limites de CPA, ATC e IC para não queimar dinheiro."
-              />
-              <FeatureCard 
-                icon={<Zap size={24}/>} 
-                title="Simulador de Escala" 
-                desc="Projete seu faturamento e lucro ao aumentar o investimento em anúncios."
-              />
-           </div>
-        </section>
-
-        {/* Pricing Section */}
-        <section id="pricing" className="py-32 px-10 max-w-7xl mx-auto">
-           <div className="bg-blue-600 rounded-[50px] p-12 md:p-20 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-12">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/2" />
-              <div className="relative z-10 max-w-md">
-                 <h2 className="text-4xl md:text-5xl font-black text-white mb-6 italic tracking-tight leading-none">PRONTO PARA <br /> O PRÓXIMO NÍVEL?</h2>
-                 <p className="text-blue-100 font-medium mb-8">Junte-se aos maiores players do mercado e tenha o controle total da sua operação na palma da mão.</p>
-                 <ul className="space-y-4 mb-10">
-                    <li className="flex items-center gap-3 text-sm font-bold text-white">
-                       <CheckCircle2 size={18} className="text-blue-200" /> Acesso vitalício às ferramentas
-                    </li>
-                    <li className="flex items-center gap-3 text-sm font-bold text-white">
-                       <CheckCircle2 size={18} className="text-blue-200" /> Atualizações constantes
-                    </li>
-                    <li className="flex items-center gap-3 text-sm font-bold text-white">
-                       <CheckCircle2 size={18} className="text-blue-200" /> Comunidade exclusiva
-                    </li>
-                 </ul>
-              </div>
-              <div className="relative z-10 bg-white rounded-[40px] p-10 text-black w-full max-w-sm shadow-2xl">
-                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Plano Anual</p>
-                 <div className="flex items-baseline gap-1 mb-6">
-                    <span className="text-2xl font-black">R$</span>
-                    <span className="text-6xl font-black tracking-tighter">97</span>
-                    <span className="text-xl font-bold text-slate-400">/mês</span>
-                 </div>
-                 <button onClick={() => setShowLogin(true)} className="w-full py-5 blue-gradient text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:scale-105 transition-all">
-                    Começar Agora
-                 </button>
-                 <p className="text-center text-[9px] text-slate-400 font-bold mt-6 uppercase tracking-widest">Garantia de 7 dias ou seu dinheiro de volta</p>
-              </div>
-           </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="py-20 px-10 border-t border-white/5">
-           <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 blue-gradient rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-                  <Globe size={16} />
-                </div>
-                <span className="font-black text-lg tracking-tighter italic">GERENCIIE<span className="text-blue-500">PRO</span></span>
-              </div>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2026 Gerenciie Pro. Todos os direitos reservados.</p>
-              <div className="flex items-center gap-6">
-                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><ImageIcon size={20}/></a>
-                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><Globe size={20}/></a>
-                 <a href="#" className="text-slate-400 hover:text-white transition-colors"><Megaphone size={20}/></a>
-              </div>
-           </div>
-        </footer>
-      </div>
-    );
-  }
-
-  if (!user && showLogin) {
-    return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 selection:bg-blue-500/30">
-        <div className="max-w-md w-full bg-white/5 border border-white/10 rounded-[50px] p-12 backdrop-blur-xl shadow-2xl relative">
-          <button onClick={() => setShowLogin(false)} className="absolute top-10 right-10 text-slate-400 hover:text-white transition-colors">
-            <X size={24}/>
-          </button>
-          <div className="flex flex-col items-center text-center mb-12">
-            <div className="w-16 h-16 blue-gradient rounded-2xl flex items-center justify-center text-white mb-6 shadow-2xl shadow-blue-500/20">
-              <Lock size={28} />
-            </div>
-            <h2 className="text-3xl font-black text-white italic tracking-tighter">BEM-VINDO AO <span className="text-blue-500">PRO</span></h2>
-            <p className="text-slate-400 text-xs font-bold mt-4 uppercase tracking-widest">Acesse sua conta com segurança</p>
-          </div>
-          
-          <button 
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-4 bg-white text-black py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl shadow-white/5"
-          >
-            <Globe size={18} className="text-blue-600" />
-            Entrar com Google
-          </button>
-          
-          <div className="mt-8 pt-8 border-t border-white/5 text-center">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              Ao entrar, você concorda com nossos <br /> termos e política de privacidade.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] text-black font-['Plus_Jakarta_Sans']">
       <aside className="w-72 bg-white border-r border-slate-200 flex flex-col z-30 shadow-sm">
@@ -654,12 +374,6 @@ export default function App() {
              <PlatformButton label="Mercado Livre" active={platform === Platform.MERCADO_LIVRE} onClick={() => setPlatform(Platform.MERCADO_LIVRE)} />
           </div>
         </nav>
-
-        <div className="p-4 border-t border-slate-100">
-           <button onClick={handleLogout} className="w-full px-4 py-3 rounded-xl flex items-center gap-3 text-slate-600 hover:text-rose-600 transition-all font-bold text-xs">
-             <LogIn size={16} className="rotate-180" /> Logout
-           </button>
-        </div>
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
