@@ -294,10 +294,21 @@ export default function App() {
     e.preventDefault();
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      setShowLogin(false);
-    } catch (error) {
+      // Use popup for better UX in most environments. 
+      // If blocked, we catch and log it for debug.
+      const result = await signInWithPopup(auth, provider);
+      if (result.user) {
+        setShowLogin(false);
+      }
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error.code === 'auth/popup-blocked') {
+        alert('O popup de login foi bloqueado pelo seu navegador. Por favor, habilite popups para continuar.');
+      } else if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
+        // User closed the popup, do nothing or show a soft hint
+      } else {
+        alert('Ocorreu um erro ao tentar fazer login. Tente novamente ou verifique sua conexão.');
+      }
     }
   };
 
@@ -408,9 +419,18 @@ export default function App() {
 
   const currentSymbol = getCurrencySymbol(pricingData.currency);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
-  if (!isAuthenticated && !showLogin) {
+  if (!user && !showLogin) {
     return (
       <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 overflow-x-hidden">
         {/* Navbar */}
@@ -574,7 +594,7 @@ export default function App() {
     );
   }
 
-  if (showLogin) {
+  if (!user && showLogin) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center p-6 selection:bg-blue-500/30">
         <div className="max-w-md w-full bg-white/5 border border-white/10 rounded-[50px] p-12 backdrop-blur-xl shadow-2xl relative">
