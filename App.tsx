@@ -521,6 +521,68 @@ export default function App() {
                       <ModernInput label="Comissão Afiliados (%)" value={pricingData.affiliateCommissionPercent} onChange={v => setPricingData(prev => ({...prev, affiliateCommissionPercent: v}))} symbol="%" />
                       <ModernInput label="Imposto (%)" value={pricingData.taxPercent} onChange={v => setPricingData(prev => ({...prev, taxPercent: v}))} symbol="%" />
                       <ModernInput label="Embalagem" value={pricingData.packagingCost} onChange={v => setPricingData(prev => ({...prev, packagingCost: v}))} symbol={currentSymbol} />
+                      
+                      <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                        <p className="text-[9px] font-black text-slate-800 uppercase tracking-widest">
+                          Resumo de Taxas por Unidade
+                        </p>
+                        
+                        <div className="space-y-1.5 text-[10px] font-bold text-slate-600">
+                          <div className="flex justify-between items-center">
+                            <span>Canal / Checkout:</span>
+                            <span className="text-black font-black">
+                              {formatCurrency(
+                                platform === Platform.DROPSHIPPING
+                                  ? (currentResult.yampiFee + currentResult.cardFee + currentResult.gatewayCost)
+                                  : currentResult.marketplaceFees,
+                                pricingData.currency
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Impostos Fiscais:</span>
+                            <span className="text-black font-black">
+                              {formatCurrency(currentResult.taxes, pricingData.currency)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Frete (%):</span>
+                            <span className="text-black font-black">
+                              {formatCurrency(currentResult.finalPrice * ((pricingData.freightPercent || 0) / 100), pricingData.currency)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Comissão Afiliados:</span>
+                            <span className="text-black font-black">
+                              {formatCurrency(currentResult.finalPrice * ((pricingData.affiliateCommissionPercent || 0) / 100), pricingData.currency)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span>Outras Taxas (Pix, Reserva, Ads Tax):</span>
+                            <span className="text-black font-black">
+                              {formatCurrency(
+                                currentResult.pixFee + currentResult.newTaxFee + currentResult.reserveFee + currentResult.marketingAdsTax,
+                                pricingData.currency
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col gap-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black text-blue-800 uppercase tracking-tight">Total de Taxas:</span>
+                            <span className="text-sm font-black text-blue-700">
+                              {formatCurrency(currentResult.totalFeesOnly, pricingData.currency)}
+                            </span>
+                          </div>
+                          <div className="text-[9px] font-bold text-slate-600 text-right">
+                            {currentResult.finalPrice > 0 
+                              ? `${((currentResult.totalFeesOnly / currentResult.finalPrice) * 100).toFixed(1)}% do preço de venda`
+                              : '0% do preço de venda'
+                            }
+                          </div>
+                        </div>
+                      </div>
                     </Section>
                   </div>
                   
