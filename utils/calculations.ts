@@ -20,7 +20,9 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     newTaxPercent,
     adsTaxPercent,
     fixedFee,
-    marketplaceCommissionPercent
+    marketplaceCommissionPercent,
+    freightPercent,
+    affiliateCommissionPercent
   } = data;
   
   // 1. CMV (Custo de Mercadoria Vendida)
@@ -62,6 +64,10 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   
   // 6. Impostos Fiscais (Venda)
   const taxes = finalPrice * (taxPercent / 100);
+
+  // 7. Frete e Afiliados adicionais
+  const freightPercentFee = finalPrice * ((freightPercent || 0) / 100);
+  const affiliateFee = finalPrice * ((affiliateCommissionPercent || 0) / 100);
   
   // Soma de todos os custos variáveis
   const totalVariableCosts = 
@@ -74,7 +80,9 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     marketplaceFees +
     gatewayCost + 
     pixFee + 
-    newTaxFee;
+    newTaxFee +
+    freightPercentFee +
+    affiliateFee;
 
   const profit = finalPrice - totalVariableCosts - totalDirectCost;
   const contributionMargin = finalPrice - totalVariableCosts - unitCMV;
@@ -88,7 +96,9 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     taxes + 
     pixFee + 
     newTaxFee + 
-    marketingAdsTax;
+    marketingAdsTax +
+    freightPercentFee +
+    affiliateFee;
   
   const marginPercent = finalPrice > 0 ? (profit / finalPrice) * 100 : 0;
   const roi = totalDirectCost > 0 ? (profit / totalDirectCost) * 100 : 0;

@@ -112,7 +112,9 @@ export default function App() {
     icmsPercent: 0,
     pixTaxPercent: 1,
     newTaxPercent: 0,
-    adsTaxPercent: 4.38
+    adsTaxPercent: 4.38,
+    freightPercent: 0,
+    affiliateCommissionPercent: 0
   });
 
   const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
@@ -139,9 +141,18 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'campaigns'));
 
     // Listen for planning history
-    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', PUBLIC_USER_ID), orderBy('date', 'desc'));
+    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', PUBLIC_USER_ID));
     const unsubscribeHistory = onSnapshot(historyQuery, (snapshot) => {
       const hist = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort in-memory to avoid requiring a composite index on Firestore
+      hist.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        if (timeA && timeB) {
+          return timeB - timeA;
+        }
+        return (b.date || '').localeCompare(a.date || '');
+      });
       setPlanningHistory(hist);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'planning_history'));
 
@@ -256,7 +267,9 @@ export default function App() {
         fixedFee: 4,
         yampiFeePercent: 0,
         cardTaxPercent: 0,
-        gatewayFee: 0
+        gatewayFee: 0,
+        freightPercent: 0,
+        affiliateCommissionPercent: 0
       }));
     } else if (platform === Platform.MERCADO_LIVRE) {
       setPricingData(prev => ({
@@ -265,7 +278,20 @@ export default function App() {
         fixedFee: 6,
         yampiFeePercent: 0,
         cardTaxPercent: 0,
-        gatewayFee: 0
+        gatewayFee: 0,
+        freightPercent: 0,
+        affiliateCommissionPercent: 0
+      }));
+    } else if (platform === Platform.TIKTOK_SHOP) {
+      setPricingData(prev => ({
+        ...prev,
+        marketplaceCommissionPercent: 5,
+        fixedFee: 0,
+        yampiFeePercent: 0,
+        cardTaxPercent: 0,
+        gatewayFee: 0,
+        freightPercent: 0,
+        affiliateCommissionPercent: 5
       }));
     } else {
       setPricingData(prev => ({
@@ -274,7 +300,9 @@ export default function App() {
         fixedFee: 0,
         yampiFeePercent: 2.5,
         cardTaxPercent: 4.99,
-        gatewayFee: 1
+        gatewayFee: 1,
+        freightPercent: 0,
+        affiliateCommissionPercent: 0
       }));
     }
   }, [platform]);
@@ -372,6 +400,7 @@ export default function App() {
              <PlatformButton label="Dropshipping" active={platform === Platform.DROPSHIPPING} onClick={() => setPlatform(Platform.DROPSHIPPING)} />
              <PlatformButton label="Shopee" active={platform === Platform.SHOPEE} onClick={() => setPlatform(Platform.SHOPEE)} />
              <PlatformButton label="Mercado Livre" active={platform === Platform.MERCADO_LIVRE} onClick={() => setPlatform(Platform.MERCADO_LIVRE)} />
+             <PlatformButton label="TikTok Shop" active={platform === Platform.TIKTOK_SHOP} onClick={() => setPlatform(Platform.TIKTOK_SHOP)} />
           </div>
         </nav>
       </aside>
@@ -488,6 +517,10 @@ export default function App() {
                       {platform !== Platform.DROPSHIPPING && (
                         <ModernInput label="Taxa Fixa Canal" value={pricingData.fixedFee} onChange={v => setPricingData(prev => ({...prev, fixedFee: v}))} symbol={currentSymbol} />
                       )}
+                      <ModernInput label="Frete (%)" value={pricingData.freightPercent} onChange={v => setPricingData(prev => ({...prev, freightPercent: v}))} symbol="%" />
+                      <ModernInput label="Comissão Afiliados (%)" value={pricingData.affiliateCommissionPercent} onChange={v => setPricingData(prev => ({...prev, affiliateCommissionPercent: v}))} symbol="%" />
+                      <ModernInput label="Imposto (%)" value={pricingData.taxPercent} onChange={v => setPricingData(prev => ({...prev, taxPercent: v}))} symbol="%" />
+                      <ModernInput label="Embalagem" value={pricingData.packagingCost} onChange={v => setPricingData(prev => ({...prev, packagingCost: v}))} symbol={currentSymbol} />
                     </Section>
                   </div>
                   

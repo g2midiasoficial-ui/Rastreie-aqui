@@ -2,7 +2,8 @@
 export enum Platform {
   DROPSHIPPING = 'Dropshipping',
   SHOPEE = 'Shopee',
-  MERCADO_LIVRE = 'Mercado Livre'
+  MERCADO_LIVRE = 'Mercado Livre',
+  TIKTOK_SHOP = 'TikTok Shop'
 }
 
 export enum TaxRegime {
@@ -36,6 +37,8 @@ export interface PricingData {
   pixTaxPercent: number;
   newTaxPercent: number;
   adsTaxPercent: number;
+  freightPercent: number; // Nova propriedade para frete %
+  affiliateCommissionPercent: number; // Nova propriedade para comissão afiliados %
 }
 
 export interface CalculationResult {
