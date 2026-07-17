@@ -529,18 +529,7 @@ export default function App() {
                         
                         <div className="space-y-1.5 text-[10px] font-bold text-slate-600">
                           <div className="flex justify-between items-center">
-                            <span>Canal / Checkout:</span>
-                            <span className="text-black font-black">
-                              {formatCurrency(
-                                platform === Platform.DROPSHIPPING
-                                  ? (currentResult.yampiFee + currentResult.cardFee + currentResult.gatewayCost)
-                                  : currentResult.marketplaceFees,
-                                pricingData.currency
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span>Impostos Fiscais:</span>
+                            <span>Impostos Fiscais (%):</span>
                             <span className="text-black font-black">
                               {formatCurrency(currentResult.taxes, pricingData.currency)}
                             </span>
@@ -552,7 +541,7 @@ export default function App() {
                             </span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span>Comissão Afiliados:</span>
+                            <span>Comissão de Afiliados:</span>
                             <span className="text-black font-black">
                               {formatCurrency(currentResult.finalPrice * ((pricingData.affiliateCommissionPercent || 0) / 100), pricingData.currency)}
                             </span>

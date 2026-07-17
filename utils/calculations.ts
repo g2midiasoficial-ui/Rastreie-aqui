@@ -88,10 +88,6 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const contributionMargin = finalPrice - totalVariableCosts - unitCMV;
   
   const totalFeesOnly = 
-    cardFee + 
-    yampiFee + 
-    marketplaceFees + 
-    gatewayCost + 
     taxes + 
     freightPercentFee +
     affiliateFee;
