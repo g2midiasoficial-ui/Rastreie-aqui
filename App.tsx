@@ -557,15 +557,6 @@ export default function App() {
                               {formatCurrency(currentResult.finalPrice * ((pricingData.affiliateCommissionPercent || 0) / 100), pricingData.currency)}
                             </span>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span>Outras Taxas (Pix, Reserva, Ads Tax):</span>
-                            <span className="text-black font-black">
-                              {formatCurrency(
-                                currentResult.pixFee + currentResult.newTaxFee + currentResult.reserveFee + currentResult.marketingAdsTax,
-                                pricingData.currency
-                              )}
-                            </span>
-                          </div>
                         </div>
 
                         <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col gap-1">

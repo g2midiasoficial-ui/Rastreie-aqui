@@ -89,14 +89,10 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   
   const totalFeesOnly = 
     cardFee + 
-    reserveFee + 
     yampiFee + 
     marketplaceFees + 
     gatewayCost + 
     taxes + 
-    pixFee + 
-    newTaxFee + 
-    marketingAdsTax +
     freightPercentFee +
     affiliateFee;
   
