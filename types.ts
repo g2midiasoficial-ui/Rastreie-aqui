@@ -39,6 +39,8 @@ export interface PricingData {
   adsTaxPercent: number;
   freightPercent: number; // Nova propriedade para frete %
   affiliateCommissionPercent: number; // Nova propriedade para comissão afiliados %
+  pricingMode?: 'markup' | 'manual'; // Nova propriedade para modo de precificação
+  customSellingPrice?: number; // Nova propriedade para preço de venda customizado
 }
 
 export interface CalculationResult {

@@ -97,8 +97,8 @@ export default function App() {
     freightIn: 5.00,
     packagingCost: 2.00,
     shippingLabel: 0,
-    fixedFee: 0,
-    marketplaceCommissionPercent: 0,
+    fixedFee: 6,
+    marketplaceCommissionPercent: 6,
     gatewayFee: 0,
     marketingPercent: 25,
     fixedOpCost: 1500,
@@ -113,8 +113,10 @@ export default function App() {
     pixTaxPercent: 1,
     newTaxPercent: 0,
     adsTaxPercent: 4.38,
-    freightPercent: 0,
-    affiliateCommissionPercent: 0
+    freightPercent: 6,
+    affiliateCommissionPercent: 10,
+    pricingMode: 'markup',
+    customSellingPrice: 150
   });
 
   const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
@@ -285,13 +287,14 @@ export default function App() {
     } else if (platform === Platform.TIKTOK_SHOP) {
       setPricingData(prev => ({
         ...prev,
-        marketplaceCommissionPercent: 5,
-        fixedFee: 0,
+        marketplaceCommissionPercent: 6,
+        fixedFee: 6,
         yampiFeePercent: 0,
         cardTaxPercent: 0,
         gatewayFee: 0,
-        freightPercent: 0,
-        affiliateCommissionPercent: 5
+        freightPercent: 6,
+        affiliateCommissionPercent: 10,
+        taxPercent: 6
       }));
     } else {
       setPricingData(prev => ({
@@ -307,7 +310,20 @@ export default function App() {
     }
   }, [platform]);
 
-  const currentResult = useMemo(() => calculatePricing(pricingData, pricingData.desiredMarkup, platform), [pricingData, platform]);
+  const currentResult = useMemo(() => {
+    if (pricingData.pricingMode === 'manual' && pricingData.customSellingPrice !== undefined) {
+      const baseProductCost = pricingData.costPrice || 0;
+      const baseFreightIn = pricingData.freightIn || 0;
+      const icmsFee = baseProductCost * ((pricingData.icmsPercent || 0) / 100);
+      const unitCMV = baseProductCost + baseFreightIn + icmsFee;
+      const unitOperatingCost = (pricingData.packagingCost || 0) + (pricingData.shippingLabel || 0);
+      const totalDirectCost = unitCMV + unitOperatingCost;
+      
+      const targetMarkup = totalDirectCost > 0 ? (pricingData.customSellingPrice / totalDirectCost) : 1;
+      return calculatePricing(pricingData, targetMarkup, platform);
+    }
+    return calculatePricing(pricingData, pricingData.desiredMarkup, platform);
+  }, [pricingData, platform]);
 
   const planningDiagnostic = useMemo(() => {
     const selectedCamps = planningCampaigns.filter(c => c.selected && c.active);
@@ -447,11 +463,23 @@ export default function App() {
              <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div className="md:col-span-2 blue-gradient rounded-[32px] p-8 text-white shadow-xl relative overflow-hidden">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">Preço Sugerido (Venda)</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">
+                      {pricingData.pricingMode === 'manual' ? 'Preço de Venda Definido' : 'Preço Sugerido (Venda)'}
+                    </p>
                     <h3 className="text-5xl font-black tracking-tighter">{formatCurrency(currentResult.finalPrice, pricingData.currency)}</h3>
-                    <div className="mt-6 flex items-center gap-4">
-                       <div className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10">Markup: {pricingData.desiredMarkup}x</div>
-                       <div className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10">ROI: {currentResult.roi.toFixed(0)}%</div>
+                    <div className="mt-6 flex items-center gap-2 flex-wrap">
+                       <div className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10">
+                         Markup: {pricingData.pricingMode === 'manual' 
+                           ? (currentResult.finalPrice / Math.max(1, (currentResult.unitCMV + (pricingData.packagingCost || 0) + (pricingData.shippingLabel || 0)))).toFixed(2)
+                           : pricingData.desiredMarkup
+                         }x
+                       </div>
+                       <div className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10">
+                         Margem: {currentResult.marginPercent.toFixed(1)}%
+                       </div>
+                       <div className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10">
+                         ROI: {currentResult.roi.toFixed(0)}%
+                       </div>
                     </div>
                   </div>
                   <StatusCard icon={<DollarSign size={20}/>} label="Lucro Unitário" value={formatCurrency(currentResult.profit, pricingData.currency)} desc="Líquido na conta" theme={currentResult.profit > 0 ? "emerald" : "rose"} />
@@ -505,7 +533,53 @@ export default function App() {
                       <ModernInput label="Nome do Produto" value={pricingData.productName} onChange={v => setPricingData(prev => ({...prev, productName: v}))} />
                       <ModernInput label="Custo Produto" value={pricingData.costPrice} onChange={v => setPricingData(prev => ({...prev, costPrice: v}))} symbol={currentSymbol} />
                       <ModernInput label="Frete Fornecedor" value={pricingData.freightIn} onChange={v => setPricingData(prev => ({...prev, freightIn: v}))} symbol={currentSymbol} />
-                      <ModernInput label="Markup Alvo" value={pricingData.desiredMarkup} onChange={v => setPricingData(prev => ({...prev, desiredMarkup: v}))} symbol="x" />
+                      
+                      <div className="space-y-1 mt-2 mb-3">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Método de Precificação
+                        </label>
+                        <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setPricingData(prev => ({ ...prev, pricingMode: 'markup' }))}
+                            className={`py-1.5 px-3 rounded-lg text-[10px] font-black transition-all ${
+                              pricingData.pricingMode !== 'manual'
+                                ? 'bg-white text-black shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            Markup Alvo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPricingData(prev => ({ ...prev, pricingMode: 'manual' }))}
+                            className={`py-1.5 px-3 rounded-lg text-[10px] font-black transition-all ${
+                              pricingData.pricingMode === 'manual'
+                                ? 'bg-white text-black shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            Preço de Venda
+                          </button>
+                        </div>
+                      </div>
+
+                      {pricingData.pricingMode === 'manual' ? (
+                        <ModernInput 
+                          label="Preço de Venda Desejado" 
+                          value={pricingData.customSellingPrice || 0} 
+                          onChange={v => setPricingData(prev => ({...prev, customSellingPrice: v}))} 
+                          symbol={currentSymbol} 
+                        />
+                      ) : (
+                        <ModernInput 
+                          label="Markup Alvo" 
+                          value={pricingData.desiredMarkup} 
+                          onChange={v => setPricingData(prev => ({...prev, desiredMarkup: v}))} 
+                          symbol="x" 
+                        />
+                      )}
+                      
                       <ModernInput label="Estimativa Vendas/Mês" value={pricingData.estimatedMonthlySales} onChange={v => setPricingData(prev => ({...prev, estimatedMonthlySales: v}))} symbol="#" />
                     </Section>
                     
