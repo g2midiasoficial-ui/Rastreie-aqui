@@ -1,5 +1,8 @@
 {
   "name": "Gerenciie Pro - CFO Dashboard",
-  "description": "Calculadora CFO de alta performance para operações de Dropshipping e Marketplaces. Gestão de margem, bússola de métricas e esteira de produtos em um só lugar.",
-  "requestFramePermissions": []
+  "description": "Calculadora CFO de alta performance para operações de Dropshipping e Marketplaces. Gestão de margem, bússola de métricas, gamificação de afiliados e esteira de produtos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
