@@ -17,7 +17,8 @@ import {
   MousePointer,
   Clock,
   Briefcase,
-  XCircle
+  XCircle,
+  Trophy
 } from 'lucide-react';
 import { Platform, PricingData, CalculationResult, TaxRegime, CurrencyCode } from './types.ts';
 import { calculatePricing, formatCurrency, getCurrencySymbol } from './utils/calculations.ts';
@@ -29,6 +30,7 @@ import {
   GoogleAuthProvider, 
   signOut,
 } from 'firebase/auth';
+import { AffiliateGamification } from './src/components/AffiliateGamification.tsx';
 import { 
   collection, 
   doc, 
@@ -88,7 +90,7 @@ export default function App() {
   const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
   const [planningHistory, setPlanningHistory] = useState<any[]>([]);
   const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification'>('overview');
   
   const [pricingData, setPricingData] = useState<PricingData>({
     productName: 'Produto Exemplo',
@@ -116,7 +118,8 @@ export default function App() {
     freightPercent: 6,
     affiliateCommissionPercent: 10,
     pricingMode: 'markup',
-    customSellingPrice: 150
+    customSellingPrice: 150,
+    feeTier: 'above_50'
   });
 
   const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
@@ -409,6 +412,7 @@ export default function App() {
           <NavItem icon={<ShieldCheck size={18} />} label="Bússola (KPIs)" active={activeTab === 'compass'} onClick={() => setActiveTab('compass')} />
           <NavItem icon={<Zap size={18} />} label="Simulação Escala" active={activeTab === 'simulation'} onClick={() => setActiveTab('simulation')} />
           <NavItem icon={<FileText size={18} />} label="DRE" active={activeTab === 'dre'} onClick={() => setActiveTab('dre')} />
+          <NavItem icon={<Trophy size={18} />} label="Gamificação Afiliados" active={activeTab === 'gamification'} onClick={() => setActiveTab('gamification')} />
           
           <div className="h-px bg-slate-100 my-4" />
           <p className="px-4 text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Canal de Venda</p>
@@ -424,7 +428,14 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 flex items-center justify-between px-10 bg-white border-b border-slate-100 sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <span className="text-xs font-black text-slate-600 uppercase tracking-widest">{activeTab}</span>
+            <span className="text-xs font-black text-slate-600 uppercase tracking-widest">
+              {activeTab === 'overview' && 'Calculadora'}
+              {activeTab === 'planning' && 'Planejamento Ads'}
+              {activeTab === 'compass' && 'Bússola (KPIs)'}
+              {activeTab === 'simulation' && 'Simulação Escala'}
+              {activeTab === 'dre' && 'Demonstração de Resultados (DRE)'}
+              {activeTab === 'gamification' && 'Gamificação & Afiliados'}
+            </span>
             <div className="h-4 w-px bg-slate-200"></div>
             <span className="text-xs font-black text-blue-600 uppercase tracking-widest">{platform}</span>
           </div>
@@ -584,14 +595,58 @@ export default function App() {
                     </Section>
                     
                     <Section title="Canal & Marketing" icon={<Megaphone size={16}/>}>
+                      <div className="space-y-1 mb-3">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Faixa de Preço (Regra de Taxas)
+                        </label>
+                        <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setPricingData(prev => ({
+                              ...prev,
+                              feeTier: 'below_50',
+                              marketplaceCommissionPercent: 4,
+                              fixedFee: 4,
+                              freightPercent: 4
+                            }))}
+                            className={`py-2 px-2 rounded-lg text-[10px] font-black transition-all flex flex-col items-center justify-center text-center ${
+                              pricingData.feeTier === 'below_50' || (pricingData.marketplaceCommissionPercent === 4 && pricingData.fixedFee === 4 && pricingData.freightPercent === 4)
+                                ? 'bg-white text-blue-700 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            <span>Abaixo R$ 50</span>
+                            <span className="text-[9px] opacity-75 font-semibold">4% + R$ 4 + 4%</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPricingData(prev => ({
+                              ...prev,
+                              feeTier: 'above_50',
+                              marketplaceCommissionPercent: 6,
+                              fixedFee: 6,
+                              freightPercent: 6
+                            }))}
+                            className={`py-2 px-2 rounded-lg text-[10px] font-black transition-all flex flex-col items-center justify-center text-center ${
+                              pricingData.feeTier === 'above_50' || (pricingData.marketplaceCommissionPercent === 6 && pricingData.fixedFee === 6 && pricingData.freightPercent === 6)
+                                ? 'bg-white text-blue-700 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            <span>+ 50 Reais</span>
+                            <span className="text-[9px] opacity-75 font-semibold">6% + R$ 6 + 6%</span>
+                          </button>
+                        </div>
+                      </div>
+
                       <ModernInput label="Budget Ads (%)" value={pricingData.marketingPercent} onChange={v => setPricingData(prev => ({...prev, marketingPercent: v}))} symbol="%" />
                       {platform !== Platform.DROPSHIPPING && (
-                        <ModernInput label="Comissão Marketplace (%)" value={pricingData.marketplaceCommissionPercent} onChange={v => setPricingData(prev => ({...prev, marketplaceCommissionPercent: v}))} symbol="%" />
+                        <ModernInput label="Comissão Marketplace (%)" value={pricingData.marketplaceCommissionPercent} onChange={v => setPricingData(prev => ({...prev, marketplaceCommissionPercent: v, feeTier: undefined}))} symbol="%" />
                       )}
                       {platform !== Platform.DROPSHIPPING && (
-                        <ModernInput label="Taxa Fixa Canal" value={pricingData.fixedFee} onChange={v => setPricingData(prev => ({...prev, fixedFee: v}))} symbol={currentSymbol} />
+                        <ModernInput label="Taxa Fixa Canal" value={pricingData.fixedFee} onChange={v => setPricingData(prev => ({...prev, fixedFee: v, feeTier: undefined}))} symbol={currentSymbol} />
                       )}
-                      <ModernInput label="Frete (%)" value={pricingData.freightPercent} onChange={v => setPricingData(prev => ({...prev, freightPercent: v}))} symbol="%" />
+                      <ModernInput label="Frete (%)" value={pricingData.freightPercent} onChange={v => setPricingData(prev => ({...prev, freightPercent: v, feeTier: undefined}))} symbol="%" />
                       <ModernInput label="Comissão Afiliados (%)" value={pricingData.affiliateCommissionPercent} onChange={v => setPricingData(prev => ({...prev, affiliateCommissionPercent: v}))} symbol="%" />
                       <ModernInput label="Imposto (%)" value={pricingData.taxPercent} onChange={v => setPricingData(prev => ({...prev, taxPercent: v}))} symbol="%" />
                       <ModernInput label="Embalagem" value={pricingData.packagingCost} onChange={v => setPricingData(prev => ({...prev, packagingCost: v}))} symbol={currentSymbol} />
@@ -1333,6 +1388,16 @@ export default function App() {
                       </div>
                    </div>
                 </div>
+             </div>
+          )}
+
+          {/* ABA DEDICADA DE GAMIFICAÇÃO & AFILIADOS */}
+          {activeTab === 'gamification' && (
+             <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+                <AffiliateGamification 
+                  pricingData={pricingData} 
+                  currentResult={currentResult} 
+                />
              </div>
           )}
 

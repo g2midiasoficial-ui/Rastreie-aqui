@@ -41,6 +41,7 @@ export interface PricingData {
   affiliateCommissionPercent: number; // Nova propriedade para comissão afiliados %
   pricingMode?: 'markup' | 'manual'; // Nova propriedade para modo de precificação
   customSellingPrice?: number; // Nova propriedade para preço de venda customizado
+  feeTier?: 'below_50' | 'above_50'; // Faixa de taxas (abaixo ou acima de R$ 50)
 }
 
 export interface CalculationResult {
