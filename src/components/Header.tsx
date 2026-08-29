@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coins as CoinsIcon, User, Settings } from 'lucide-react';
+import { Coins as CoinsIcon, User, Settings, Rocket } from 'lucide-react';
 import { Platform, PricingData, CalculationResult, CurrencyCode } from '../../types.ts';
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
   setPricingData: React.Dispatch<React.SetStateAction<PricingData>>;
   currentResult: CalculationResult;
   currentUser?: any;
+  onOpenLanding?: () => void;
 }
 
 export function Header({
@@ -19,7 +20,8 @@ export function Header({
   pricingData,
   setPricingData,
   currentResult,
-  currentUser
+  currentUser,
+  onOpenLanding
 }: HeaderProps) {
   const getTabTitle = () => {
     switch (activeTab) {
@@ -43,7 +45,18 @@ export function Header({
         <div className="h-4 w-px bg-slate-200"></div>
         <span className="text-xs font-black text-blue-600 uppercase tracking-widest">{platform}</span>
       </div>
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
+        {onOpenLanding && (
+          <button
+            onClick={onOpenLanding}
+            className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-700 hover:text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+            title="Ir para a Página de Vendas e Login"
+          >
+            <Rocket size={13} className="text-blue-600" />
+            <span>Página de Vendas</span>
+          </button>
+        )}
+
         <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
           <CoinsIcon size={14} className="text-blue-600" />
           <select 

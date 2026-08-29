@@ -25,6 +25,7 @@ import { MetricsCompass } from './src/components/MetricsCompass.tsx';
 import { DREFinancialStatement } from './src/components/DREFinancialStatement.tsx';
 import { AffiliateGamification } from './src/components/AffiliateGamification.tsx';
 import { SettingsAccount } from './src/components/SettingsAccount.tsx';
+import { SalesLandingPage } from './src/components/SalesLandingPage.tsx';
 import { AuthModal } from './src/components/AuthModal.tsx';
 
 enum OperationType {
@@ -60,6 +61,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 export default function App() {
+  const [currentView, setCurrentView] = useState<'app' | 'landing'>('landing');
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
       const saved = localStorage.getItem('gerenciie_user_session');
@@ -391,6 +393,18 @@ export default function App() {
     return calculatePricing(scaledData, pricingData.desiredMarkup, platform);
   }, [pricingData, platform, scaleMultiplier]);
 
+  if (currentView === 'landing') {
+    return (
+      <SalesLandingPage 
+        onEnterPlatform={() => setCurrentView('app')}
+        currentUser={currentUser}
+        onLoginSuccess={(user) => {
+          if (user) setCurrentUser(user);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] text-black font-['Plus_Jakarta_Sans']">
       <Sidebar 
@@ -399,6 +413,7 @@ export default function App() {
         platform={platform}
         setPlatform={setPlatform}
         currentUser={currentUser}
+        onOpenLanding={() => setCurrentView('landing')}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -410,6 +425,7 @@ export default function App() {
           setPricingData={setPricingData}
           currentResult={currentResult}
           currentUser={currentUser}
+          onOpenLanding={() => setCurrentView('landing')}
         />
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-slate-50/30">
