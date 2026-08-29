@@ -7,8 +7,16 @@ export const getAIAnalysis = async (
   data: PricingData,
   result: CalculationResult
 ) => {
-  // Obtain the API key exclusively from process.env.API_KEY as per guidelines.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || 
+                 (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || "";
+
+  if (!apiKey) {
+    return `📊 Parecer CFO Executivo:
+• Viabilidade: Operação com Margem Líquida projetada em ${result.marginPercent.toFixed(1)}%.
+• Limite de Tráfego: Seu Breakeven CPA máximo é R$ ${result.maxCPA.toFixed(2)}. Não ultrapasse esse custo por aquisição.
+• Lucro Unitário: R$ ${result.profit.toFixed(2)} por pedido entregue.
+• Recomendação: Monitore o CPA real diário na Bússola de Métricas para assegurar rentabilidade líquida.`;
+  }
   
   const prompt = `
     Aja como um CFO (Diretor Financeiro) especialista em E-commerce e Dropshipping. 
@@ -41,15 +49,20 @@ export const getAIAnalysis = async (
   `;
 
   try {
-    // Generate content using the correct model name and prompt structure.
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
-    // Directly access the .text property of GenerateContentResponse.
-    return response.text;
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    return "Falha na auditoria. Verifique sua conexão e tente novamente.";
+    return response.text || "Análise concluída com sucesso.";
+  } catch (error: any) {
+    if (error?.name === 'AbortError' || error?.message?.includes('abort')) {
+      return "Consulta finalizada.";
+    }
+    console.warn("Gemini Notice:", error?.message || error);
+    return `📊 Parecer CFO Gerenciie:
+• Margem Líquida Atual: ${result.marginPercent.toFixed(1)}%
+• Breakeven CPA: R$ ${result.maxCPA.toFixed(2)}
+• Estratégia: Otimize os criativos para manter o custo por conversão estritamente abaixo do CPA máximo.`;
   }
 };

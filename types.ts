@@ -81,3 +81,33 @@ export interface CalculationResult {
   adSpend7Days: number;
   adSpend30Days: number;
 }
+
+export interface CampaignInput {
+  id: string;
+  userId?: string;
+  name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  atc: number;
+  ic: number;
+  sales: number;
+  active: boolean;
+  selected?: boolean;
+  phase?: string;
+  notes?: string;
+  createdAt?: any;
+}
+
+export interface PlanningHistoryItem {
+  id?: string;
+  userId?: string;
+  date: string;
+  spend: number;
+  revenue: number;
+  roas: number;
+  cpa: number;
+  profit: number;
+  createdAt?: any;
+}
+
