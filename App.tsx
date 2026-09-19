@@ -511,6 +511,12 @@ export default function App() {
               platform={platform}
               pricingData={pricingData}
               currentResult={currentResult}
+              currentUser={currentUser}
+              setCurrentUser={setCurrentUser}
+              openAuthModal={() => {
+                setAuthModalMode('login');
+                setIsAuthModalOpen(true);
+              }}
             />
           )}
         </div>

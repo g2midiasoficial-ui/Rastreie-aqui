@@ -100,7 +100,9 @@ export const askAgentAssistant = async ({
   platform,
   pricingData,
   result,
-  history = []
+  history = [],
+  userName,
+  userEmail
 }: {
   userMessage: string;
   mode?: 'offer' | 'question' | 'general';
@@ -108,6 +110,8 @@ export const askAgentAssistant = async ({
   pricingData: PricingData;
   result: CalculationResult;
   history?: { role: 'user' | 'assistant'; content: string }[];
+  userName?: string;
+  userEmail?: string;
 }): Promise<string> => {
   const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || 
                  (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || "";
@@ -117,9 +121,13 @@ export const askAgentAssistant = async ({
     ? `Taxa SFP Ativa: Preço Original R$ ${pricingData.originalPrice || 169.90}, Desconto Vendedor R$ ${result.sfpDiscountValue.toFixed(2)} (${pricingData.sellerDiscountType === 'percent' ? `${pricingData.sellerDiscount}%` : 'R$'}), Alíquota SFP ${pricingData.sfpPercent || 6}%, Custo SFP unitário: R$ ${result.sfpFee.toFixed(2)}`
     : 'Taxa SFP: Desativada';
 
+  const userContext = userName 
+    ? `- Usuário Conectado via Google: ${userName} (${userEmail || 'Conta Google Ativa'})\n` 
+    : '';
+
   const productContext = `
-DADOS DO PRODUTO ATUAL NO SISTEMA:
-- Nome do Produto: "${pricingData.productName || 'Produto Ativo'}"
+DADOS DA OPERAÇÃO & PRODUTO:
+${userContext}- Nome do Produto: "${pricingData.productName || 'Produto Ativo'}"
 - Canal de Venda Selecionado: ${platform}
 - Preço de Venda Praticado: R$ ${result.finalPrice.toFixed(2)}
 - Custo de Mercadoria Vendida (CMV Total): R$ ${result.unitCMV.toFixed(2)} (Custo: R$ ${pricingData.costPrice.toFixed(2)}, Frete In: R$ ${pricingData.freightIn.toFixed(2)})
