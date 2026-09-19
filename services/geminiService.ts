@@ -239,3 +239,46 @@ Para otimizar essa operação:
   }
 };
 
+export const testGeminiConnection = async (): Promise<{ success: boolean; latencyMs: number; message: string; model: string }> => {
+  const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || 
+                 (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || "";
+
+  if (!apiKey) {
+    return {
+      success: false,
+      latencyMs: 0,
+      message: "Chave de API Gemini não detectada no ambiente.",
+      model: "gemini-3.8-flash"
+    };
+  }
+
+  const start = performance.now();
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: "Responda apenas 'OK' se a conexão com o Gemini estiver funcionando perfeitamente.",
+      config: {
+        temperature: 0.1,
+        maxOutputTokens: 10,
+      }
+    });
+
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      success: true,
+      latencyMs,
+      message: `Gemini 3.8 Flash conectado com sucesso (${response.text?.trim() || 'OK'}).`,
+      model: "gemini-3.8-flash"
+    };
+  } catch (err: any) {
+    const latencyMs = Math.round(performance.now() - start);
+    return {
+      success: false,
+      latencyMs,
+      message: err?.message || "Erro ao comunicar com a API do Gemini.",
+      model: "gemini-3.8-flash"
+    };
+  }
+};
+

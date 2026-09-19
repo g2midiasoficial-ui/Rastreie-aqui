@@ -10,7 +10,8 @@ import {
   GoogleAuthProvider, 
   signOut 
 } from 'firebase/auth';
-import { auth } from '../lib/firebase.ts';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase.ts';
 import { Platform, PricingData, CalculationResult } from '../../types.ts';
 import { askAgentAssistant, AgentChatMessage, cleanMarkdownSymbols } from '../../services/geminiService.ts';
 
@@ -143,17 +144,30 @@ Escolha uma das sugestões abaixo ou digite sua pergunta!`
       
       const userPayload = {
         uid: result.user.uid,
-        displayName: result.user.displayName || 'Lojista Conectado',
-        email: result.user.email || 'lojista@google.com',
-        photoURL: result.user.photoURL,
+        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Google',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || undefined,
         provider: 'google'
       };
+
+      try {
+        await setDoc(doc(db, 'users', result.user.uid), {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: userPayload.displayName,
+          photoURL: result.user.photoURL,
+          provider: 'google',
+          lastLogin: serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Firestore sync notice in Agent:', e);
+      }
       
       localStorage.setItem('gerenciie_user_session', JSON.stringify(userPayload));
       if (setCurrentUser) {
         setCurrentUser(userPayload);
       }
-      setGoogleConnectMsg('Conta Google conectada com sucesso! Gemini 3.8 Flash sincronizado.');
+      setGoogleConnectMsg(`Conta Google conectada (${result.user.email})! Gemini AI sincronizado.`);
       
       // Adiciona mensagem amigável no chat
       const systemWelcomeMsg: AgentChatMessage = {
@@ -161,12 +175,13 @@ Escolha uma das sugestões abaixo ou digite sua pergunta!`
         role: 'assistant',
         category: 'general',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        content: `🟢 Conta Google de ${userPayload.displayName} conectada com sucesso!
+        content: `🟢 Conta Google (${userPayload.displayName || userPayload.email}) conectada com sucesso!
 
-O Gemini 3.8 Flash está totalmente sincronizado com seus produtos e dados. Como posso ajudar com a estratégia do "${pricingData.productName || 'seu produto'}" hoje?`
+O Gemini AI está ativo e pronto para analisar as estratégias do "${pricingData.productName || 'seu produto'}". Como posso te ajudar hoje?`
       };
       setMessages(prev => [...prev, systemWelcomeMsg]);
     } catch (err: any) {
+      console.error('Google connect error:', err);
       const isAbortOrClosed = 
         err?.code === 'auth/popup-closed-by-user' || 
         err?.code === 'auth/cancelled-popup-request' ||
@@ -175,21 +190,9 @@ O Gemini 3.8 Flash está totalmente sincronizado com seus produtos e dados. Como
         err?.name === 'AbortError';
 
       if (isAbortOrClosed) {
-        setGoogleConnectMsg('Conexão com Google cancelada.');
+        setGoogleConnectMsg('Conexão com Google cancelada na janela pop-up.');
       } else {
-        // Modo resiliente para preview de iframe
-        const fallbackUser = {
-          uid: 'google_user_' + Date.now().toString().slice(-6),
-          displayName: 'Lojista Google Pro',
-          email: 'lojista.pro@gmail.com',
-          photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          provider: 'google'
-        };
-        localStorage.setItem('gerenciie_user_session', JSON.stringify(fallbackUser));
-        if (setCurrentUser) {
-          setCurrentUser(fallbackUser);
-        }
-        setGoogleConnectMsg('Conta Google sincronizada com o Gemini!');
+        setGoogleConnectMsg(`Não foi possível conectar com o Google: ${err?.message || 'Verifique as permissões de pop-up.'}`);
       }
     } finally {
       setIsConnectingGoogle(false);

@@ -10,7 +10,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { auth } from '../lib/firebase.ts';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase.ts';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -53,19 +54,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       
       const userPayload = {
         uid: result.user.uid,
-        displayName: result.user.displayName || 'Lojista Conectado',
-        email: result.user.email || 'lojista@google.com',
-        photoURL: result.user.photoURL,
+        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Google',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || undefined,
         provider: 'google'
       };
+
+      try {
+        await setDoc(doc(db, 'users', result.user.uid), {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: userPayload.displayName,
+          photoURL: result.user.photoURL,
+          provider: 'google',
+          lastLogin: serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.warn('Firestore sync notice:', e);
+      }
       
       saveUserSession(userPayload);
-      setSuccessMsg('Autenticado com sucesso via Google!');
+      setSuccessMsg(`Autenticado com sucesso via Google (${result.user.email})!`);
       setTimeout(() => {
         onSuccess(userPayload);
         onClose();
       }, 500);
     } catch (err: any) {
+      console.error('Google Sign-In Error:', err);
       const isAbortOrClosed = 
         err?.code === 'auth/popup-closed-by-user' || 
         err?.code === 'auth/cancelled-popup-request' ||
@@ -74,30 +89,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         err?.name === 'AbortError';
 
       if (isAbortOrClosed) {
-        // Quietly notify user without throwing fatal errors
-        setError('O processo de login com o Google foi cancelado.');
+        setError('O processo de login com o Google foi cancelado pela janela pop-up.');
       } else if (
         err?.code === 'auth/popup-blocked' || 
         err?.code === 'auth/unauthorized-domain' ||
         err?.message?.includes('popup')
       ) {
-        // Fallback gracefully so user in preview iframe is not locked out
-        const fallbackUser = {
-          uid: 'google_user_' + Date.now().toString().slice(-6),
-          displayName: 'Lojista Google Pro',
-          email: 'lojista.pro@gmail.com',
-          photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          provider: 'google'
-        };
-        saveUserSession(fallbackUser);
-        setSuccessMsg('Acesso liberado com sucesso!');
-        setTimeout(() => {
-          onSuccess(fallbackUser);
-          onClose();
-        }, 500);
+        setError('O pop-up de login foi bloqueado pelo navegador. Por favor, permita pop-ups ou utilize o formulário de E-mail abaixo.');
       } else {
-        console.warn('Google Sign-In Notice:', err?.message || err);
-        setError('Não foi possível conectar com o Google no momento. Você pode usar o E-mail ou o Acesso Rápido abaixo.');
+        setError(`Não foi possível autenticar com o Google: ${err?.message || 'Verifique sua conexão.'}`);
       }
     } finally {
       setLoading(false);
@@ -126,32 +126,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       if (mode === 'register') {
-        let userRecord: any = null;
-        try {
-          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-          if (name.trim() && userRecord) {
+        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        const userRecord = userCred.user;
+        
+        if (name.trim()) {
+          try {
             await updateProfile(userRecord, { displayName: name.trim() });
-          }
-        } catch (firebaseErr: any) {
-          console.warn('Firebase createUser warning:', firebaseErr);
-          // If already exists, attempt login
-          if (firebaseErr.code === 'auth/email-already-in-use') {
-            try {
-              const loginCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-              userRecord = loginCred.user;
-            } catch {
-              // fallback
-            }
+          } catch (profileErr) {
+            console.warn('Profile update notice:', profileErr);
           }
         }
 
         const userPayload = {
-          uid: userRecord?.uid || 'user_' + Math.random().toString(36).substring(2, 9),
+          uid: userRecord.uid,
           displayName: name.trim() || cleanEmail.split('@')[0],
           email: cleanEmail,
           provider: 'password'
         };
+
+        try {
+          await setDoc(doc(db, 'users', userRecord.uid), {
+            uid: userRecord.uid,
+            email: cleanEmail,
+            displayName: userPayload.displayName,
+            provider: 'password',
+            createdAt: serverTimestamp(),
+            lastLogin: serverTimestamp()
+          }, { merge: true });
+        } catch (e) {
+          console.warn('Firestore sync notice:', e);
+        }
 
         saveUserSession(userPayload);
         setSuccessMsg('Conta criada com sucesso! Bem-vindo à Gerenciie Pro.');
@@ -162,32 +166,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       } else {
         // Modo Login
-        let userRecord: any = null;
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-        } catch (firebaseErr: any) {
-          console.warn('Firebase signIn warning:', firebaseErr);
-          // Auto-provision if user didn't exist or is testing
-          if (firebaseErr.code === 'auth/user-not-found' || firebaseErr.code === 'auth/invalid-credential') {
-            try {
-              const createdCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-              userRecord = createdCred.user;
-            } catch {
-              // local fallback
-            }
-          }
-        }
+        const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        const userRecord = userCred.user;
 
         const userPayload = {
-          uid: userRecord?.uid || 'user_' + Math.random().toString(36).substring(2, 9),
-          displayName: userRecord?.displayName || cleanEmail.split('@')[0],
+          uid: userRecord.uid,
+          displayName: userRecord.displayName || cleanEmail.split('@')[0],
           email: cleanEmail,
+          photoURL: userRecord.photoURL || undefined,
           provider: 'password'
         };
 
+        try {
+          await setDoc(doc(db, 'users', userRecord.uid), {
+            uid: userRecord.uid,
+            email: cleanEmail,
+            displayName: userPayload.displayName,
+            lastLogin: serverTimestamp()
+          }, { merge: true });
+        } catch (e) {
+          console.warn('Firestore sync notice:', e);
+        }
+
         saveUserSession(userPayload);
-        setSuccessMsg('Login realizado com sucesso!');
+        setSuccessMsg(`Login efetuado com sucesso! Olá, ${userPayload.displayName}.`);
         setTimeout(() => {
           onSuccess(userPayload);
           onClose();
@@ -195,7 +197,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       console.error('Email Auth Error:', err);
-      setError(err.message || 'Ocorreu um erro ao entrar. Tente o Acesso Rápido.');
+      let message = 'Ocorreu um erro ao entrar.';
+      if (err.code === 'auth/invalid-email') {
+        message = 'O formato do e-mail inserido é inválido.';
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = 'E-mail ou senha incorretos. Verifique os dados ou crie uma conta.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        message = 'Este e-mail já está cadastrado. Alterne para o modo de Login.';
+      } else if (err.code === 'auth/weak-password') {
+        message = 'A senha informada é fraca. Utilize pelo menos 6 caracteres.';
+      } else if (err.message) {
+        message = err.message;
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
