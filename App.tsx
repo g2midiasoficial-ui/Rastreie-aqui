@@ -27,6 +27,7 @@ import { AffiliateGamification } from './src/components/AffiliateGamification.ts
 import { SettingsAccount } from './src/components/SettingsAccount.tsx';
 import { SalesLandingPage } from './src/components/SalesLandingPage.tsx';
 import { AuthModal } from './src/components/AuthModal.tsx';
+import { AgentAdvisor } from './src/components/AgentAdvisor.tsx';
 
 enum OperationType {
   CREATE = 'create',
@@ -76,7 +77,7 @@ export default function App() {
   const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
   const [planningHistory, setPlanningHistory] = useState<any[]>([]);
   const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent'>('overview');
   
   const [pricingData, setPricingData] = useState<PricingData>({
     productName: 'Produto Exemplo',
@@ -502,6 +503,14 @@ export default function App() {
               setPricingData={setPricingData}
               savedProductsCount={savedProducts.length}
               campaignsCount={planningCampaigns.length}
+            />
+          )}
+
+          {activeTab === 'agent' && (
+            <AgentAdvisor 
+              platform={platform}
+              pricingData={pricingData}
+              currentResult={currentResult}
             />
           )}
         </div>

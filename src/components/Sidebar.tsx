@@ -1,13 +1,13 @@
 import React from 'react';
 import { 
   LayoutDashboard, Target, ShieldCheck, Zap, FileText, 
-  Trophy, Globe, Settings, User
+  Trophy, Globe, Settings, User, Bot
 } from 'lucide-react';
 import { Platform } from '../../types.ts';
 
 interface SidebarProps {
-  activeTab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings';
-  setActiveTab: (tab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings') => void;
+  activeTab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent';
+  setActiveTab: (tab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent') => void;
   platform: Platform;
   setPlatform: (platform: Platform) => void;
   currentUser?: any;
@@ -76,6 +76,12 @@ export function Sidebar({
           label="Configurações & Conta" 
           active={activeTab === 'settings'} 
           onClick={() => setActiveTab('settings')} 
+        />
+        <NavItem 
+          icon={<Bot size={18} />} 
+          label="Agente IA (Ofertas & Dúvidas)" 
+          active={activeTab === 'agent'} 
+          onClick={() => setActiveTab('agent')} 
         />
         
         <div className="h-px bg-slate-100 my-4" />

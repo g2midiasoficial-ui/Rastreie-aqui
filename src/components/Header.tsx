@@ -3,8 +3,8 @@ import { Coins as CoinsIcon, User, Settings } from 'lucide-react';
 import { Platform, PricingData, CalculationResult, CurrencyCode } from '../../types.ts';
 
 interface HeaderProps {
-  activeTab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings';
-  setActiveTab: (tab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings') => void;
+  activeTab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent';
+  setActiveTab: (tab: 'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent') => void;
   platform: Platform;
   pricingData: PricingData;
   setPricingData: React.Dispatch<React.SetStateAction<PricingData>>;
@@ -30,6 +30,7 @@ export function Header({
       case 'dre': return 'Demonstração de Resultados (DRE)';
       case 'gamification': return 'Gamificação & Afiliados';
       case 'settings': return 'Configurações & Conta';
+      case 'agent': return 'Agente IA • Estrategista de Ofertas & Dúvidas';
       default: return 'CFO Dashboard';
     }
   };
