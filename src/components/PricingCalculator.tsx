@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Package, Megaphone, DollarSign, Target, BarChart3 
+  Package, Megaphone, DollarSign, Target, BarChart3, Truck, Sparkles
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -281,6 +281,126 @@ export function PricingCalculator({
               onChange={v => setPricingData(prev => ({ ...prev, packagingCost: v }))} 
               symbol={currentSymbol} 
             />
+
+            {/* Bloco Taxa de Serviço SFP */}
+            <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Truck size={15} className="text-blue-600" />
+                  <span className="text-[10px] font-black text-slate-900 uppercase tracking-wider">
+                    Taxa de Serviço SFP (Frete Grátis)
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={pricingData.sfpEnabled !== false} 
+                    onChange={e => setPricingData(prev => ({ ...prev, sfpEnabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              <div className="p-3 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 rounded-2xl border border-blue-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black text-blue-900 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles size={11} className="text-blue-600" /> Regra de Cálculo SFP
+                  </span>
+                  <span className="text-[9px] font-extrabold text-blue-700 bg-white/80 px-2 py-0.5 rounded-md border border-blue-200">
+                    (Preço Original - Desconto) × %
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">
+                      Preço Original
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={pricingData.originalPrice !== undefined ? pricingData.originalPrice : 169.90}
+                      onChange={e => setPricingData(prev => ({ ...prev, originalPrice: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="169.90"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase block truncate">
+                        Desc. Vendedor
+                      </label>
+                      <div className="flex items-center bg-white rounded-md border border-slate-200 p-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setPricingData(prev => ({ ...prev, sellerDiscountType: 'currency' }))}
+                          className={`px-1.5 py-0.5 rounded text-[8px] font-black transition-all ${
+                            (pricingData.sellerDiscountType || 'currency') === 'currency'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                          title="Desconto em valor monetário"
+                        >
+                          {currentSymbol}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPricingData(prev => ({ ...prev, sellerDiscountType: 'percent' }))}
+                          className={`px-1.5 py-0.5 rounded text-[8px] font-black transition-all ${
+                            pricingData.sellerDiscountType === 'percent'
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                          title="Desconto em porcentagem (%)"
+                        >
+                          %
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={pricingData.sellerDiscount !== undefined ? pricingData.sellerDiscount : 9.00}
+                        onChange={e => setPricingData(prev => ({ ...prev, sellerDiscount: parseFloat(e.target.value) || 0 }))}
+                        className="w-full pl-2 pr-6 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder={(pricingData.sellerDiscountType === 'percent') ? "5" : "9.00"}
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 pointer-events-none">
+                        {pricingData.sellerDiscountType === 'percent' ? '%' : currentSymbol}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">
+                      Taxa SFP (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={pricingData.sfpPercent !== undefined ? pricingData.sfpPercent : 6}
+                      onChange={e => setPricingData(prev => ({ ...prev, sfpPercent: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="6"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between text-[10px]">
+                  <span className="font-bold text-slate-600">
+                    ({formatCurrency(pricingData.originalPrice !== undefined ? pricingData.originalPrice : 169.90, pricingData.currency)} - {
+                      pricingData.sellerDiscountType === 'percent'
+                        ? `${pricingData.sellerDiscount !== undefined ? pricingData.sellerDiscount : 9}% (${formatCurrency(currentResult.sfpDiscountValue, pricingData.currency)})`
+                        : formatCurrency(pricingData.sellerDiscount !== undefined ? pricingData.sellerDiscount : 9.00, pricingData.currency)
+                    }) × {pricingData.sfpPercent !== undefined ? pricingData.sfpPercent : 6}%
+                  </span>
+                  <span className="font-black text-blue-700 bg-white px-2 py-0.5 rounded-lg border border-blue-200 shadow-xs">
+                    = {formatCurrency(currentResult.sfpFee, pricingData.currency)}
+                  </span>
+                </div>
+              </div>
+            </div>
             
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
               <p className="text-[9px] font-black text-slate-800 uppercase tracking-widest">
@@ -306,6 +426,16 @@ export function PricingCalculator({
                     {formatCurrency(currentResult.finalPrice * ((pricingData.affiliateCommissionPercent || 0) / 100), pricingData.currency)}
                   </span>
                 </div>
+                {pricingData.sfpEnabled !== false && (
+                  <div className="flex justify-between items-center text-blue-700">
+                    <span className="flex items-center gap-1">
+                      <Truck size={12} /> Taxa SFP (6%):
+                    </span>
+                    <span className="font-black">
+                      {formatCurrency(currentResult.sfpFee, pricingData.currency)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col gap-1">

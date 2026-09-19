@@ -105,7 +105,12 @@ export default function App() {
     affiliateCommissionPercent: 10,
     pricingMode: 'markup',
     customSellingPrice: 150,
-    feeTier: 'above_50'
+    feeTier: 'above_50',
+    sfpEnabled: true,
+    originalPrice: 169.90,
+    sellerDiscount: 9.00,
+    sellerDiscountType: 'currency',
+    sfpPercent: 6
   });
 
   const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
@@ -413,7 +418,6 @@ export default function App() {
         platform={platform}
         setPlatform={setPlatform}
         currentUser={currentUser}
-        onOpenLanding={() => setCurrentView('landing')}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -425,7 +429,6 @@ export default function App() {
           setPricingData={setPricingData}
           currentResult={currentResult}
           currentUser={currentUser}
-          onOpenLanding={() => setCurrentView('landing')}
         />
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-slate-50/30">

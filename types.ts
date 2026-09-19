@@ -42,6 +42,11 @@ export interface PricingData {
   pricingMode?: 'markup' | 'manual'; // Nova propriedade para modo de precificação
   customSellingPrice?: number; // Nova propriedade para preço de venda customizado
   feeTier?: 'below_50' | 'above_50'; // Faixa de taxas (abaixo ou acima de R$ 50)
+  sfpEnabled?: boolean; // Habilitar Taxa de Serviço SFP
+  originalPrice?: number; // Preço original do produto (ex: 169.90 BRL)
+  sellerDiscount?: number; // Desconto do vendedor (ex: 9.00 BRL ou 5%)
+  sellerDiscountType?: 'currency' | 'percent'; // Tipo de desconto: valor ou %
+  sfpPercent?: number; // Porcentagem Taxa SFP (ex: 6%)
 }
 
 export interface CalculationResult {
@@ -60,6 +65,9 @@ export interface CalculationResult {
   icmsFee: number;
   pixFee: number;
   newTaxFee: number;
+  sfpFee: number; // Taxa de serviço SFP calculada
+  sfpBaseValue: number; // Base de cálculo SFP: (Preço original - Desconto vendedor)
+  sfpDiscountValue: number; // Valor em moeda do desconto aplicado
   profit: number;
   marginPercent: number;
   roi: number;

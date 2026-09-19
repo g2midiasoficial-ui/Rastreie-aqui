@@ -22,7 +22,14 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     fixedFee,
     marketplaceCommissionPercent,
     freightPercent,
-    affiliateCommissionPercent
+    affiliateCommissionPercent,
+    sfpEnabled,
+    originalPrice: customOriginalPrice,
+    sellerDiscount: customSellerDiscount,
+    sellerDiscountType,
+    sfpPercent: customSfpPercent,
+    pricingMode,
+    customSellingPrice
   } = data;
   
   // 1. CMV (Custo de Mercadoria Vendida)
@@ -35,7 +42,10 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const totalDirectCost = unitCMV + unitOperatingCost;
   
   // 2. Preço de Venda
-  const finalPrice = totalDirectCost * targetMarkup;
+  const finalPrice = (pricingMode === 'manual' && customSellingPrice && customSellingPrice > 0)
+    ? customSellingPrice 
+    : totalDirectCost * targetMarkup;
+  const effectiveMarkup = totalDirectCost > 0 ? (finalPrice / totalDirectCost) : targetMarkup;
   
   // 3. Marketing e Tráfego
   const marketingCost = finalPrice * (marketingPercent / 100);
@@ -52,7 +62,24 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     marketplaceFees = (finalPrice * (marketplaceCommissionPercent / 100)) + fixedFee;
   }
   
-  // 5. Financeiro (Gateway e Checkout)
+  // 5. Taxa de Serviço SFP (Programa de Frete Grátis)
+  // Fórmula: (Preço original - Desconto do vendedor) × % SFP
+  // Desconto pode ser em valor absoluto (R$) ou porcentagem (%)
+  const origPrice = (customOriginalPrice !== undefined && customOriginalPrice > 0)
+    ? customOriginalPrice 
+    : (finalPrice > 0 ? finalPrice : 169.90);
+  const rawDiscount = customSellerDiscount !== undefined ? customSellerDiscount : 0;
+  const discType = sellerDiscountType || 'currency';
+  const sfpDiscountValue = discType === 'percent'
+    ? origPrice * (rawDiscount / 100)
+    : rawDiscount;
+
+  const sfpPct = customSfpPercent !== undefined ? customSfpPercent : 6;
+  const sfpBaseValue = Math.max(0, origPrice - sfpDiscountValue);
+  const isSfpActive = sfpEnabled !== false;
+  const sfpFee = isSfpActive ? sfpBaseValue * (sfpPct / 100) : 0;
+
+  // 6. Financeiro (Gateway e Checkout)
   // No marketplace, taxas financeiras geralmente já estão na comissão, 
   // exceto se o usuário usar antecipação extra. Mantemos opcional.
   const cardFee = platform === Platform.DROPSHIPPING ? finalPrice * (cardTaxPercent / 100) : 0;
@@ -62,10 +89,10 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const pixFee = finalPrice * (pixTaxPercent / 100);
   const newTaxFee = finalPrice * (newTaxPercent / 100);
   
-  // 6. Impostos Fiscais (Venda)
+  // 7. Impostos Fiscais (Venda)
   const taxes = finalPrice * (taxPercent / 100);
 
-  // 7. Frete e Afiliados adicionais
+  // 8. Frete e Afiliados adicionais
   const freightPercentFee = finalPrice * ((freightPercent || 0) / 100);
   const affiliateFee = finalPrice * ((affiliateCommissionPercent || 0) / 100);
   
@@ -82,7 +109,8 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     pixFee + 
     newTaxFee +
     freightPercentFee +
-    affiliateFee;
+    affiliateFee +
+    sfpFee;
 
   const profit = finalPrice - totalVariableCosts - totalDirectCost;
   const contributionMargin = finalPrice - totalVariableCosts - unitCMV;
@@ -90,7 +118,8 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const totalFeesOnly = 
     taxes + 
     freightPercentFee +
-    affiliateFee;
+    affiliateFee +
+    sfpFee;
   
   const marginPercent = finalPrice > 0 ? (profit / finalPrice) * 100 : 0;
   const roi = totalDirectCost > 0 ? (profit / totalDirectCost) * 100 : 0;
@@ -113,7 +142,7 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
   const icMax = maxCPA * 0.45;
 
   return {
-    markup: targetMarkup,
+    markup: effectiveMarkup,
     finalPrice,
     totalVariableCosts,
     unitCMV,
@@ -128,6 +157,9 @@ export const calculatePricing = (data: PricingData, targetMarkup: number, platfo
     icmsFee,
     pixFee,
     newTaxFee,
+    sfpFee,
+    sfpBaseValue,
+    sfpDiscountValue,
     profit,
     marginPercent,
     roi,

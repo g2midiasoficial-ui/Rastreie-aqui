@@ -16,7 +16,8 @@ export function DREFinancialStatement({
   const contributionMargin1 = currentResult.monthlyRevenue - 
     (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel) * pricingData.estimatedMonthlySales;
 
-  const taxesAndFees = (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax) * 
+  const marketingAndAds = (currentResult.marketingCost + currentResult.marketingAdsTax) * pricingData.estimatedMonthlySales;
+  const taxesAndFees = (currentResult.totalVariableCosts - (currentResult.marketingCost + currentResult.marketingAdsTax)) * 
     pricingData.estimatedMonthlySales;
 
   return (
@@ -68,17 +69,26 @@ export function DREFinancialStatement({
           
           <DRERow 
             label="(-) Investimento em Tráfego (Ads)" 
-            value={currentResult.adSpend30Days} 
+            value={marketingAndAds} 
             currency={pricingData.currency} 
             isNegative 
           />
           
           <DRERow 
-            label="(-) Impostos e Taxas" 
+            label="(-) Impostos, Taxas de Canal & SFP" 
             value={taxesAndFees} 
             currency={pricingData.currency} 
             isNegative 
           />
+
+          {pricingData.fixedOpCost > 0 && (
+            <DRERow 
+              label="(-) Custos Operacionais Fixos" 
+              value={pricingData.fixedOpCost} 
+              currency={pricingData.currency} 
+              isNegative 
+            />
+          )}
           
           <div className="h-10" />
 

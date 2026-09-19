@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, Target, ShieldCheck, Zap, FileText, 
-  Trophy, Globe, Settings, User, Rocket, ExternalLink
+  Trophy, Globe, Settings, User
 } from 'lucide-react';
 import { Platform } from '../../types.ts';
 
@@ -11,7 +11,6 @@ interface SidebarProps {
   platform: Platform;
   setPlatform: (platform: Platform) => void;
   currentUser?: any;
-  onOpenLanding: () => void;
 }
 
 export function Sidebar({
@@ -19,8 +18,7 @@ export function Sidebar({
   setActiveTab,
   platform,
   setPlatform,
-  currentUser,
-  onOpenLanding
+  currentUser
 }: SidebarProps) {
   return (
     <aside className="w-72 bg-white border-r border-slate-200 flex flex-col z-30 shadow-sm">
@@ -103,20 +101,6 @@ export function Sidebar({
             active={platform === Platform.TIKTOK_SHOP} 
             onClick={() => setPlatform(Platform.TIKTOK_SHOP)} 
           />
-        </div>
-
-        <div className="h-px bg-slate-100 my-4" />
-        <div className="px-2 pt-1 pb-2">
-          <button
-            onClick={onOpenLanding}
-            className="w-full text-left px-4 py-3 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 text-blue-700 hover:from-blue-100 hover:to-indigo-100 transition-all flex items-center justify-between group shadow-xs cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <Rocket size={16} className="text-blue-600 group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-black">Página de Vendas & Login</span>
-            </div>
-            <ExternalLink size={12} className="text-blue-400 group-hover:translate-x-0.5 transition-transform" />
-          </button>
         </div>
       </nav>
 
