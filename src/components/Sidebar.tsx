@@ -162,9 +162,7 @@ export function Sidebar({
         </div>
 
         {/* Section 3: Administração Master */}
-        {(currentUser?.email === 'Betosouza3322@gmail.com' || 
-          currentUser?.email?.toLowerCase() === 'betosouza3322@gmail.com' ||
-          currentUser?.email === 'g2midiasoficial@gmail.com' || 
+        {(currentUser?.email?.toLowerCase() === 'betosouza3322@gmail.com' || 
           currentUser?.role === 'admin') && (
           <div className="space-y-1 pt-2 border-t border-slate-100">
             <div className="px-3 py-1 text-[10px] font-black text-amber-500 uppercase tracking-widest">
