@@ -7,9 +7,130 @@
       "properties": {
         "uid": { "type": "string" },
         "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "provider": { "type": "string" },
+        "role": { "type": "string" },
+        "plan": { "type": "string" },
+        "status": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Bank account or credit card",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "bank": { "type": "string" },
+        "type": { "type": "string" },
+        "balance": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "color": { "type": "string" },
+        "mode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "type"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial income or expense transaction",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "accountId": { "type": "string" },
+        "accountName": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "mode": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "description", "amount", "type", "date"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Income or expense category",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "budgetLimit": { "type": "number" }
+      },
+      "required": ["userId", "name", "type"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Debt or loan tracking",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "creditor": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "installmentsCount": { "type": "number" },
+        "paidInstallments": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "interestRate": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["userId", "title", "totalAmount"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "Savings or financial target",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "targetDate": { "type": "string" },
+        "category": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["userId", "title", "targetAmount"]
+    },
+    "MarketItem": {
+      "title": "MarketItem",
+      "description": "Supermarket item for shopping list",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "checked": { "type": "boolean" },
+        "unit": { "type": "string" }
+      },
+      "required": ["userId", "name"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Vehicle tracking and maintenance",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "model": { "type": "string" },
+        "plate": { "type": "string" },
+        "year": { "type": "number" },
+        "currentKm": { "type": "number" },
+        "fuelType": { "type": "string" }
+      },
+      "required": ["userId", "name"]
     },
     "PricingData": {
       "title": "Pricing Data",
@@ -82,6 +203,34 @@
     "users": {
       "schema": "User",
       "description": "Stored users"
+    },
+    "accounts": {
+      "schema": "Account",
+      "description": "User bank accounts and wallets"
+    },
+    "transactions": {
+      "schema": "Transaction",
+      "description": "Financial revenues and expenses"
+    },
+    "categories": {
+      "schema": "Category",
+      "description": "Income and expense categories"
+    },
+    "debts": {
+      "schema": "Debt",
+      "description": "Debts and loans"
+    },
+    "goals": {
+      "schema": "Goal",
+      "description": "Financial goals"
+    },
+    "market_items": {
+      "schema": "MarketItem",
+      "description": "Supermarket list items"
+    },
+    "vehicles": {
+      "schema": "Vehicle",
+      "description": "Vehicles and logs"
     },
     "products": {
       "schema": "PricingData",

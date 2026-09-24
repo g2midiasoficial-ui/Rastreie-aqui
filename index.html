@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -12,9 +11,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
-        // Global process env fallback
+        // Global process env fallback and fetch setter safeguard
         if (typeof window !== 'undefined') {
             window.process = window.process || { env: { API_KEY: "", NODE_ENV: "production" } };
+            try {
+                if (typeof window.fetch === 'function') {
+                    const originalFetch = window.fetch.bind(window);
+                    let _activeFetch = originalFetch;
+                    Object.defineProperty(window, 'fetch', {
+                        get() { return _activeFetch; },
+                        set(fn) { if (typeof fn === 'function') _activeFetch = fn; },
+                        configurable: true,
+                        enumerable: true
+                    });
+                }
+            } catch (e) {
+                // Ignore if property is non-configurable in some browser environments
+            }
         }
     </script>
 </head>

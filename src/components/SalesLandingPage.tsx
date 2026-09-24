@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ArrowRight, ShieldCheck, Sparkles, CheckCircle2, TrendingUp, 
-  BarChart3, DollarSign, Calculator, Lock, User, Mail, LogIn,
+  BarChart3, DollarSign, Calculator, Lock, User, Mail, LogIn, X,
   ChevronDown, ChevronUp, Star, Award, Layers, Zap, Check,
   ExternalLink, Globe, HelpCircle, ArrowUpRight, Play, Eye, AlertCircle
 } from 'lucide-react';
@@ -18,14 +18,17 @@ interface SalesLandingPageProps {
   onEnterPlatform: () => void;
   currentUser: any;
   onLoginSuccess: (user: any) => void;
+  onOpenAdmin?: () => void;
 }
 
 export function SalesLandingPage({
   onEnterPlatform,
   currentUser,
-  onLoginSuccess
+  onLoginSuccess,
+  onOpenAdmin
 }: SalesLandingPageProps) {
-  // Auth Form State inside the Sales Page
+  // Auth Modal Popup State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
@@ -36,6 +39,18 @@ export function SalesLandingPage({
 
   // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  const openAuthModal = (mode: 'login' | 'register' = 'login') => {
+    setAuthMode(mode);
+    setAuthError(null);
+    setAuthSuccess(null);
+    setIsAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false);
+    setAuthError(null);
+  };
 
   const saveUserSession = (userObj: any) => {
     try {
@@ -258,12 +273,22 @@ export function SalesLandingPage({
 
           <nav className="hidden md:flex items-center gap-8 text-xs font-bold text-slate-300">
             <a href="#recursos" className="hover:text-white transition-colors">Recursos</a>
-            <a href="#login-section" className="hover:text-white transition-colors">Entrar na Conta</a>
             <a href="#planos" className="hover:text-white transition-colors">Planos</a>
             <a href="#faq" className="hover:text-white transition-colors">Perguntas Frequentes</a>
           </nav>
 
           <div className="flex items-center gap-3">
+            {onOpenAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Acessar Painel de Administração"
+              >
+                <ShieldCheck size={14} className="text-amber-400" />
+                <span>Painel Admin</span>
+              </button>
+            )}
+
             {currentUser ? (
               <button
                 onClick={onEnterPlatform}
@@ -273,21 +298,13 @@ export function SalesLandingPage({
                 <ArrowRight size={14} />
               </button>
             ) : (
-              <>
-                <button
-                  onClick={scrollToLogin}
-                  className="px-4 py-2 rounded-xl text-slate-300 hover:text-white text-xs font-black uppercase tracking-wider transition-colors cursor-pointer"
-                >
-                  Entrar
-                </button>
-                <button
-                  onClick={onEnterPlatform}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                >
-                  <span>Abrir Sistema</span>
-                  <ArrowRight size={14} />
-                </button>
-              </>
+              <button
+                onClick={() => openAuthModal('login')}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              >
+                <LogIn size={14} />
+                <span>Entrar</span>
+              </button>
             )}
           </div>
         </div>
@@ -316,19 +333,20 @@ export function SalesLandingPage({
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
               <button
-                onClick={onEnterPlatform}
+                onClick={() => openAuthModal('login')}
                 className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-xl shadow-blue-600/30 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] cursor-pointer"
               >
-                <span>Acessar o Sistema Grátis</span>
+                <LogIn size={18} />
+                <span>Entrar no Sistema</span>
                 <ArrowRight size={18} />
               </button>
 
               <button
-                onClick={scrollToLogin}
+                onClick={() => openAuthModal('register')}
                 className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <LogIn size={18} className="text-blue-400" />
-                <span>Entrar na Minha Conta</span>
+                <Sparkles size={18} className="text-blue-400" />
+                <span>Criar Conta Gratuita</span>
               </button>
             </div>
 
@@ -345,238 +363,6 @@ export function SalesLandingPage({
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={16} className="text-emerald-400" />
                 <span>Dropshipping & Marketplaces</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Seção Especial: ÁREA DE ACESSO / ENTRAR NA CONTA */}
-      <section id="login-section" className="py-16 bg-slate-900/60 border-y border-slate-800/80 relative">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
-            {/* Lado Esquerdo: Benefícios de ter a Conta */}
-            <div className="lg:col-span-6 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-black uppercase tracking-wider">
-                <Lock size={12} />
-                <span>Área de Membros & Acesso</span>
-              </div>
-
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight italic">
-                Acesse Sua Conta ou Crie Seu Perfil Pro
-              </h2>
-
-              <p className="text-slate-300 text-sm leading-relaxed">
-                Ao entrar no Gerenciie Pro, suas precificações de produtos, histórico de testes de tráfego pago e cenários de escala ficam 100% seguros e sincronizados em nuvem.
-              </p>
-
-              <div className="space-y-3.5 pt-2">
-                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <ShieldCheck size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-white">Sincronização Cloud Firestore</h4>
-                    <p className="text-[11px] text-slate-400">Acesse seus cálculos de qualquer dispositivo, celular ou desktop.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <TrendingUp size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-white">Histórico de Campanhas & Diagnóstico</h4>
-                    <p className="text-[11px] text-slate-400">Salve seus testes de campanhas diárias e exporte em CSV.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-slate-800/40 border border-slate-800">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                    <Award size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-white">Gamificação & Programa de Afiliados</h4>
-                    <p className="text-[11px] text-slate-400">Desbloqueie conquistas financeiras e comissões de parceiro.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Lado Direito: Caixa de Login / Cadastro */}
-            <div className="lg:col-span-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
-
-                {currentUser ? (
-                  <div className="space-y-6 text-center py-4">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-2xl mx-auto shadow-lg shadow-blue-500/20">
-                      {currentUser.displayName ? currentUser.displayName.substring(0, 2).toUpperCase() : 'LO'}
-                    </div>
-                    <div>
-                      <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-black uppercase tracking-wider">
-                        Sessão Ativa
-                      </span>
-                      <h3 className="text-xl font-black text-white mt-2">
-                        Olá, {currentUser.displayName || 'Lojista'}!
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">{currentUser.email}</p>
-                    </div>
-
-                    <button
-                      onClick={onEnterPlatform}
-                      className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                    >
-                      <span>Entrar no Dashboard do Sistema</span>
-                      <ArrowRight size={18} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {/* Alertas */}
-                    {authError && (
-                      <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-bold flex items-center gap-2">
-                        <AlertCircle size={16} className="shrink-0" />
-                        <span>{authError}</span>
-                      </div>
-                    )}
-                    {authSuccess && (
-                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2">
-                        <CheckCircle2 size={16} className="shrink-0" />
-                        <span>{authSuccess}</span>
-                      </div>
-                    )}
-
-                    {/* Botão Google */}
-                    <button
-                      type="button"
-                      onClick={handleGoogleLogin}
-                      disabled={loading}
-                      className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer shadow-sm"
-                    >
-                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                      </svg>
-                      <span>{loading ? 'Conectando...' : 'Entrar com Conta Google'}</span>
-                    </button>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-px bg-slate-800" />
-                      <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">ou com e-mail</span>
-                      <div className="flex-1 h-px bg-slate-800" />
-                    </div>
-
-                    {/* Alternador Modo */}
-                    <div className="grid grid-cols-2 p-1 bg-slate-950/60 rounded-xl border border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => { setAuthMode('login'); setAuthError(null); }}
-                        className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                          authMode === 'login' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Entrar (Login)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setAuthMode('register'); setAuthError(null); }}
-                        className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                          authMode === 'register' 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        Criar Nova Conta
-                      </button>
-                    </div>
-
-                    {/* Formulário */}
-                    <form onSubmit={handleEmailAuth} className="space-y-3">
-                      {authMode === 'register' && (
-                        <div>
-                          <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                            Nome ou Nome da Operação
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Matheus Ecom"
-                            value={authName}
-                            onChange={(e) => setAuthName(e.target.value)}
-                            className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                          E-mail
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          placeholder="lojista@empresa.com"
-                          value={authEmail}
-                          onChange={(e) => setAuthEmail(e.target.value)}
-                          className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
-                          Senha
-                        </label>
-                        <input
-                          type="password"
-                          required
-                          placeholder="••••••••"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {loading ? 'Processando...' : authMode === 'login' ? 'Entrar no Sistema' : 'Criar Conta e Acessar'}
-                      </button>
-                    </form>
-
-                    {/* Acesso Rápido para Demonstração */}
-                    <div className="pt-3 border-t border-slate-800">
-                      <p className="text-[9px] font-black uppercase text-slate-500 text-center mb-2">
-                        Ou experimente com um clique:
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleQuickLogin('Lojista Dropshipping', 'lojista.demo@gerenciie.com')}
-                          className="py-2 px-2 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Sparkles size={12} className="text-blue-400" />
-                          <span>Demo Lojista</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickLogin('Gestor Financeiro CFO', 'gestor.cfo@gerenciie.com')}
-                          className="py-2 px-2 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <ShieldCheck size={12} className="text-indigo-400" />
-                          <span>Demo CFO</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -670,10 +456,10 @@ export function SalesLandingPage({
                 </ul>
               </div>
               <button
-                onClick={onEnterPlatform}
+                onClick={() => openAuthModal('register')}
                 className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
               >
-                Acessar Agora
+                Criar Conta Gratuita
               </button>
             </div>
 
@@ -711,10 +497,10 @@ export function SalesLandingPage({
                 </ul>
               </div>
               <button
-                onClick={onEnterPlatform}
+                onClick={() => openAuthModal('register')}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
               >
-                Começar Teste Pro
+                Garantir Acesso Pro
               </button>
             </div>
 
@@ -745,7 +531,7 @@ export function SalesLandingPage({
                 </ul>
               </div>
               <button
-                onClick={onEnterPlatform}
+                onClick={() => openAuthModal('register')}
                 className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
               >
                 Falar com Consultor
@@ -801,11 +587,167 @@ export function SalesLandingPage({
           </div>
 
           <div className="flex items-center gap-6 text-[11px] font-bold">
-            <button onClick={scrollToLogin} className="hover:text-slate-300 transition-colors">Entrar na Conta</button>
-            <button onClick={onEnterPlatform} className="hover:text-slate-300 transition-colors">Abrir Dashboard</button>
+            <button onClick={() => openAuthModal('login')} className="hover:text-slate-300 transition-colors cursor-pointer">Entrar na Conta</button>
+            <button onClick={() => openAuthModal('register')} className="hover:text-slate-300 transition-colors cursor-pointer">Criar Cadastro</button>
           </div>
         </div>
       </footer>
+
+      {/* Modal de Autenticação / Acesse Sua Conta ou Crie Seu Perfil Pro */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div 
+            className="fixed inset-0" 
+            onClick={closeAuthModal} 
+          />
+
+          <div className="relative z-10 w-full max-w-md bg-slate-900 border border-slate-800 rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
+
+            {/* Botão Fechar */}
+            <button
+              onClick={closeAuthModal}
+              className="absolute top-5 right-5 w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Cabeçalho do Modal */}
+            <div className="mb-6 pr-8">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-black uppercase tracking-wider mb-2">
+                <Lock size={12} />
+                <span>Área de Membros & Acesso</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight italic">
+                Acesse Sua Conta ou Crie Seu Perfil Pro
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Sincronize cálculos, precificações e cenários em tempo real.
+              </p>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="space-y-4">
+              {/* Alertas */}
+              {authError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+              {authSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 size={16} className="shrink-0" />
+                  <span>{authSuccess}</span>
+                </div>
+              )}
+
+              {/* Botão Google */}
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all active:scale-[0.99] disabled:opacity-50 cursor-pointer shadow-md"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>{loading ? 'Conectando...' : 'Entrar com Conta Google'}</span>
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-800" />
+                <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">ou com e-mail</span>
+                <div className="flex-1 h-px bg-slate-800" />
+              </div>
+
+              {/* Alternador Modo */}
+              <div className="grid grid-cols-2 p-1 bg-slate-950/60 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('login'); setAuthError(null); }}
+                  className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    authMode === 'login' 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Entrar (Login)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAuthMode('register'); setAuthError(null); }}
+                  className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                    authMode === 'register' 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Criar Nova Conta
+                </button>
+              </div>
+
+              {/* Formulário */}
+              <form onSubmit={handleEmailAuth} className="space-y-3">
+                {authMode === 'register' && (
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                      Nome ou Nome da Operação
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Matheus Ecom"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                    E-mail
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="lojista@empresa.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-black uppercase text-slate-400 block mb-1">
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full text-xs font-bold p-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {loading ? 'Processando...' : authMode === 'login' ? 'Entrar no Sistema' : 'Criar Conta e Acessar'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

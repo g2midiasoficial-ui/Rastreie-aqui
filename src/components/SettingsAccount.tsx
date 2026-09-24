@@ -26,6 +26,7 @@ interface SettingsAccountProps {
   setPricingData: React.Dispatch<React.SetStateAction<PricingData>>;
   savedProductsCount: number;
   campaignsCount: number;
+  onLogout?: () => void;
 }
 
 interface DiagnosticState {
@@ -42,7 +43,8 @@ export function SettingsAccount({
   pricingData,
   setPricingData,
   savedProductsCount,
-  campaignsCount
+  campaignsCount,
+  onLogout
 }: SettingsAccountProps) {
   // Auth Form State
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -294,8 +296,12 @@ export function SettingsAccount({
       console.warn('Logout notice:', err);
     }
     localStorage.removeItem('gerenciie_user_session');
+    localStorage.removeItem('gerenciie_admin_unlocked');
     setCurrentUser(null);
     setAuthSuccess('Você saiu da sua conta.');
+    if (onLogout) {
+      onLogout();
+    }
   };
 
   const runFullDiagnostics = async () => {

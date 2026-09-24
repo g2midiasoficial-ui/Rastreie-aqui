@@ -486,30 +486,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           </form>
 
-          {/* Atalhos Rápidos para Testar */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <p className="text-[10px] font-black uppercase text-slate-400 text-center">Acesso Rápido em 1 Clique</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickAccess('Lojista Dropshipping', 'dropshipping@gerenciie.com')}
-                className="py-2.5 px-3 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-700 hover:text-blue-700 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-              >
-                <Play size={12} className="text-blue-600 fill-blue-600 shrink-0" />
-                <span>Entrar como Lojista</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickAccess('Gestor E-commerce PRO', 'gestor.cfo@gerenciie.com')}
-                className="py-2.5 px-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer text-center"
-              >
-                <Sparkles size={12} className="text-indigo-600 shrink-0" />
-                <span>Acesso CFO VIP</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold pt-1">
+          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold pt-2 border-t border-slate-100">
             <ShieldCheck size={13} className="text-emerald-500" />
             <span>Ambiente Seguro com Criptografia SSL e Firestore Sync</span>
           </div>

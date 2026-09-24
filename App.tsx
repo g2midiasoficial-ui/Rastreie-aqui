@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Platform, PricingData, TaxRegime } from './types.ts';
+import { Platform, PricingData, TaxRegime, CampaignInput } from './types.ts';
 import { calculatePricing, getCurrencySymbol } from './utils/calculations.ts';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { 
   collection, 
   doc, 
@@ -15,8 +15,12 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './src/lib/firebase.ts';
 
-// Modular Components
-import { Sidebar } from './src/components/Sidebar.tsx';
+// Financial Suite Hooks & Types
+import { FinancialMode, Transaction, Account } from './src/types/finance.ts';
+import { useFinancialData } from './src/lib/financialStore.ts';
+
+// Layout & Components
+import { Sidebar, AppTab } from './src/components/Sidebar.tsx';
 import { Header } from './src/components/Header.tsx';
 import { PricingCalculator } from './src/components/PricingCalculator.tsx';
 import { ScaleSimulation } from './src/components/ScaleSimulation.tsx';
@@ -24,45 +28,32 @@ import { ScalePlanning } from './src/components/ScalePlanning.tsx';
 import { MetricsCompass } from './src/components/MetricsCompass.tsx';
 import { DREFinancialStatement } from './src/components/DREFinancialStatement.tsx';
 import { AffiliateGamification } from './src/components/AffiliateGamification.tsx';
+import { AgentAdvisor } from './src/components/AgentAdvisor.tsx';
 import { SettingsAccount } from './src/components/SettingsAccount.tsx';
 import { SalesLandingPage } from './src/components/SalesLandingPage.tsx';
+import { AdminDashboard } from './src/components/AdminDashboard.tsx';
+
+// Financial Modules
+import { FinanceOverview } from './src/components/FinanceOverview.tsx';
+import { FinanceAgentChat } from './src/components/FinanceAgentChat.tsx';
+import { FinanceAccounts } from './src/components/FinanceAccounts.tsx';
+import { FinanceIncomes } from './src/components/FinanceIncomes.tsx';
+import { FinanceExpenses } from './src/components/FinanceExpenses.tsx';
+import { FinanceTransactions } from './src/components/FinanceTransactions.tsx';
+import { FinanceReports } from './src/components/FinanceReports.tsx';
+import { FinanceCalendar } from './src/components/FinanceCalendar.tsx';
+import { FinanceDebts } from './src/components/FinanceDebts.tsx';
+import { FinanceCategories } from './src/components/FinanceCategories.tsx';
+import { FinanceGoals } from './src/components/FinanceGoals.tsx';
+import { FinanceMarket } from './src/components/FinanceMarket.tsx';
+import { FinanceVehicles } from './src/components/FinanceVehicles.tsx';
+import { FinanceProfile } from './src/components/FinanceProfile.tsx';
 import { AuthModal } from './src/components/AuthModal.tsx';
-import { AgentAdvisor } from './src/components/AgentAdvisor.tsx';
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-  };
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {},
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'app' | 'landing'>('landing');
+  const [currentView, setCurrentView] = useState<'app' | 'landing' | 'admin'>('landing');
+  const [activeTab, setActiveTab] = useState<AppTab>('overview');
+
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
       const saved = localStorage.getItem('gerenciie_user_session');
@@ -71,14 +62,27 @@ export default function App() {
       return null;
     }
   });
+
+  const [mode, setMode] = useState<FinancialMode>(() => {
+    const saved = localStorage.getItem('gerenciie_financial_mode');
+    return (saved as FinancialMode) || 'personal';
+  });
+
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
 
-  const [planningCampaigns, setPlanningCampaigns] = useState<any[]>([]);
-  const [planningHistory, setPlanningHistory] = useState<any[]>([]);
+  // Quick Global Add Modals
+  const [isGlobalIncomeModalOpen, setIsGlobalIncomeModalOpen] = useState<boolean>(false);
+  const [isGlobalExpenseModalOpen, setIsGlobalExpenseModalOpen] = useState<boolean>(false);
+  const [quickDesc, setQuickDesc] = useState<string>('');
+  const [quickAmount, setQuickAmount] = useState<string>('');
+  const [quickCat, setQuickCat] = useState<string>('');
+  const [quickAccId, setQuickAccId] = useState<string>('');
+  const [quickDate, setQuickDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // E-commerce state
   const [platform, setPlatform] = useState<Platform>(Platform.DROPSHIPPING);
-  const [activeTab, setActiveTab] = useState<'overview' | 'dre' | 'compass' | 'simulation' | 'planning' | 'gamification' | 'settings' | 'agent'>('overview');
-  
+  const [scaleMultiplier, setScaleMultiplier] = useState<number>(2);
   const [pricingData, setPricingData] = useState<PricingData>({
     productName: 'Produto Exemplo',
     currency: 'BRL',
@@ -115,349 +119,235 @@ export default function App() {
   });
 
   const [savedProducts, setSavedProducts] = useState<PricingData[]>([]);
-  const [scaleMultiplier, setScaleMultiplier] = useState<number>(2);
+  const [planningCampaigns, setPlanningCampaigns] = useState<CampaignInput[]>([]);
+  const [planningHistory, setPlanningHistory] = useState<any[]>([]);
 
-  // Public User ID for persistence without mandatory login
-  const PUBLIC_USER_ID = currentUser?.uid || 'public_user';
+  // Financial Data Store Hook
+  const financeStore = useFinancialData(currentUser, mode);
 
-  // Auth State Listener
+  // Auth observer
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        const userObj = {
+        const userData = {
           uid: user.uid,
-          displayName: user.displayName || user.email?.split('@')[0] || 'Lojista',
           email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'Usuário',
           photoURL: user.photoURL,
-          provider: user.providerData?.[0]?.providerId || 'firebase'
         };
-        setCurrentUser(userObj);
-        try {
-          localStorage.setItem('gerenciie_user_session', JSON.stringify(userObj));
-        } catch (e) {
-          console.warn(e);
-        }
+        setCurrentUser(userData);
+        localStorage.setItem('gerenciie_user_session', JSON.stringify(userData));
       }
     });
-    return () => unsubscribeAuth();
+    return () => unsubscribe();
   }, []);
 
-  // Firestore Listeners
-  useEffect(() => {
-    // Listen for products
-    const productsQuery = query(collection(db, 'products'), where('userId', '==', PUBLIC_USER_ID));
-    const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
-      const prods = snapshot.docs.map(d => d.data() as PricingData);
-      setSavedProducts(prods);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'products'));
-
-    // Listen for campaigns
-    const campaignsQuery = query(collection(db, 'campaigns'), where('userId', '==', PUBLIC_USER_ID));
-    const unsubscribeCampaigns = onSnapshot(campaignsQuery, (snapshot) => {
-      const camps = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setPlanningCampaigns(camps);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'campaigns'));
-
-    // Listen for planning history
-    const historyQuery = query(collection(db, 'planning_history'), where('userId', '==', PUBLIC_USER_ID));
-    const unsubscribeHistory = onSnapshot(historyQuery, (snapshot) => {
-      const hist = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort in-memory
-      hist.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        if (timeA && timeB) {
-          return timeB - timeA;
-        }
-        return (b.date || '').localeCompare(a.date || '');
-      });
-      setPlanningHistory(hist);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'planning_history'));
-
-    return () => {
-      unsubscribeProducts();
-      unsubscribeCampaigns();
-      unsubscribeHistory();
-    };
-  }, [PUBLIC_USER_ID]);
-
-  const addPlanningCampaign = async (phase: 'Teste' | 'Validação' | 'Escala' = 'Teste') => {
-    const newCamp = {
-      userId: PUBLIC_USER_ID,
-      name: `${phase} - ${new Date().toLocaleDateString('pt-BR')}`,
-      spend: 0,
-      impressions: 0,
-      clicks: 0,
-      atc: 0,
-      ic: 0,
-      sales: 0,
-      active: true,
-      selected: true,
-      phase: phase,
-      notes: '',
-      createdAt: serverTimestamp()
-    };
+  const handleLogout = async () => {
     try {
-      await addDoc(collection(db, 'campaigns'), newCamp);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'campaigns');
+      await signOut(auth);
+    } catch {
+      // ignore
     }
+    localStorage.removeItem('gerenciie_user_session');
+    localStorage.removeItem('gerenciie_admin_unlocked');
+    setCurrentUser(null);
+    setCurrentView('landing');
+    setActiveTab('overview');
   };
 
-  const updatePlanningCampaign = async (id: string, updates: any) => {
-    try {
-      await setDoc(doc(db, 'campaigns', id), updates, { merge: true });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `campaigns/${id}`);
-    }
+  const handleSetMode = (newMode: FinancialMode) => {
+    setMode(newMode);
+    localStorage.setItem('gerenciie_financial_mode', newMode);
   };
 
-  const removePlanningCampaign = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'campaigns', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `campaigns/${id}`);
-    }
-  };
-
-  const toggleSelectAllPlanning = async (val: boolean) => {
-    planningCampaigns.forEach(c => {
-      updatePlanningCampaign(c.id, { selected: val });
-    });
-  };
-
-  const savePlanningSimulation = async () => {
-    if (planningDiagnostic.budget === 0 && planningDiagnostic.sales === 0) return;
-    
-    const newEntry = {
-      userId: PUBLIC_USER_ID,
-      date: new Date().toLocaleDateString('pt-BR'),
-      spend: planningDiagnostic.budget,
-      revenue: planningDiagnostic.revenue,
-      roas: planningDiagnostic.roas,
-      cpa: planningDiagnostic.cpa,
-      profit: planningDiagnostic.profit,
-      createdAt: serverTimestamp()
-    };
-    
-    try {
-      await addDoc(collection(db, 'planning_history'), newEntry);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'planning_history');
-    }
-  };
-
-  const saveProduct = async () => {
-    if (!pricingData.productName) return;
-    
-    const productId = pricingData.productName.replace(/[^a-zA-Z0-9]/g, '_');
-    try {
-      await setDoc(doc(db, 'products', `${PUBLIC_USER_ID}_${productId}`), {
-        ...pricingData,
-        userId: PUBLIC_USER_ID,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `products/${PUBLIC_USER_ID}_${productId}`);
-    }
-  };
-
-  const deleteProduct = async (name: string) => {
-    const productId = name.replace(/[^a-zA-Z0-9]/g, '_');
-    try {
-      await deleteDoc(doc(db, 'products', `${PUBLIC_USER_ID}_${productId}`));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `products/${PUBLIC_USER_ID}_${productId}`);
-    }
-  };
-
-  const loadProduct = (product: PricingData) => {
-    setPricingData({ ...product });
-  };
-
-  useEffect(() => {
-    if (platform === Platform.SHOPEE) {
-      setPricingData(prev => ({
-        ...prev,
-        marketplaceCommissionPercent: 14,
-        fixedFee: 4,
-        yampiFeePercent: 0,
-        cardTaxPercent: 0,
-        gatewayFee: 0,
-        freightPercent: 0,
-        affiliateCommissionPercent: 0
-      }));
-    } else if (platform === Platform.MERCADO_LIVRE) {
-      setPricingData(prev => ({
-        ...prev,
-        marketplaceCommissionPercent: 11.5,
-        fixedFee: 6,
-        yampiFeePercent: 0,
-        cardTaxPercent: 0,
-        gatewayFee: 0,
-        freightPercent: 0,
-        affiliateCommissionPercent: 0
-      }));
-    } else if (platform === Platform.TIKTOK_SHOP) {
-      setPricingData(prev => ({
-        ...prev,
-        marketplaceCommissionPercent: 6,
-        fixedFee: 6,
-        yampiFeePercent: 0,
-        cardTaxPercent: 0,
-        gatewayFee: 0,
-        freightPercent: 6,
-        affiliateCommissionPercent: 10,
-        taxPercent: 6
-      }));
-    } else {
-      setPricingData(prev => ({
-        ...prev,
-        marketplaceCommissionPercent: 0,
-        fixedFee: 0,
-        yampiFeePercent: 2.5,
-        cardTaxPercent: 4.99,
-        gatewayFee: 1,
-        freightPercent: 0,
-        affiliateCommissionPercent: 0
-      }));
-    }
-  }, [platform]);
-
-  const currentResult = useMemo(() => {
-    if (pricingData.pricingMode === 'manual' && pricingData.customSellingPrice !== undefined) {
-      const baseProductCost = pricingData.costPrice || 0;
-      const baseFreightIn = pricingData.freightIn || 0;
-      const icmsFee = baseProductCost * ((pricingData.icmsPercent || 0) / 100);
-      const unitCMV = baseProductCost + baseFreightIn + icmsFee;
-      const unitOperatingCost = (pricingData.packagingCost || 0) + (pricingData.shippingLabel || 0);
-      const totalDirectCost = unitCMV + unitOperatingCost;
-      
-      const targetMarkup = totalDirectCost > 0 ? (pricingData.customSellingPrice / totalDirectCost) : 1;
-      return calculatePricing(pricingData, targetMarkup, platform);
-    }
+  // E-commerce Calculations
+  const calculationResult = useMemo(() => {
     return calculatePricing(pricingData, pricingData.desiredMarkup, platform);
   }, [pricingData, platform]);
 
-  const planningDiagnostic = useMemo(() => {
-    const selectedCamps = planningCampaigns.filter(c => c.selected && c.active);
-    
-    const budget = selectedCamps.reduce((acc, c) => acc + Number(c.spend || 0), 0);
-    const impressions = selectedCamps.reduce((acc, c) => acc + Number(c.impressions || 0), 0);
-    const clicks = selectedCamps.reduce((acc, c) => acc + Number(c.clicks || 0), 0);
-    const atc = selectedCamps.reduce((acc, c) => acc + Number(c.atc || 0), 0);
-    const ic = selectedCamps.reduce((acc, c) => acc + Number(c.ic || 0), 0);
-    const sales = selectedCamps.reduce((acc, c) => acc + Number(c.sales || 0), 0);
-    
-    const summaryByPhase = {
-      Teste: selectedCamps.filter(c => c.phase === 'Teste').length,
-      Validação: selectedCamps.filter(c => c.phase === 'Validação').length,
-      Escala: selectedCamps.filter(c => c.phase === 'Escala').length,
-    };
-
-    const revenue = sales * currentResult.finalPrice;
-    
-    const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-    const cvr = clicks > 0 ? (sales / clicks) * 100 : 0;
-    const atcRate = clicks > 0 ? (atc / clicks) * 100 : 0;
-    const icRate = atc > 0 ? (ic / atc) * 100 : 0;
-    const cpm = impressions > 0 ? (budget / impressions) * 1000 : 0;
-    const cpc = clicks > 0 ? budget / clicks : 0;
-
-    const unitVariableCostsNoAds = (currentResult.unitCMV + pricingData.packagingCost + pricingData.shippingLabel + (currentResult.totalFeesOnly - currentResult.marketingCost - currentResult.marketingAdsTax));
-    
-    const totalCosts = (unitVariableCostsNoAds * sales) + budget + (pricingData.fixedOpCost / 30 * (selectedCamps.length || 1)); 
-    const profit = revenue - totalCosts;
-    const cpa = sales > 0 ? budget / sales : 0;
-    const roas = budget > 0 ? revenue / budget : 0;
-
-    const issues = [];
-    
-    if (selectedCamps.length === 0) {
-      return { budget: 0, impressions: 0, clicks: 0, atc: 0, ic: 0, sales: 0, revenue: 0, profit: 0, cpa: 0, roas: 0, cpc: 0, ctr: 0, cvr: 0, atcRate: 0, icRate: 0, cpm: 0, issues: [], dailyData: [], scaleGuidance: 'Selecione entradas para analisar.', summaryByPhase };
-    }
-
-    if (ctr < 1) issues.push({ type: 'error', label: 'CTR Baixo', msg: 'Anúncio pouco atraente. Melhore criativo.' });
-    if (atcRate < 5) issues.push({ type: 'error', label: 'ATC Baixo', msg: 'Muitos cliques, poucas intenções. Melhore a oferta.' });
-    if (cvr < 1) issues.push({ type: 'error', label: 'CVR Crítica', msg: 'Sua conversão final está drenando lucro.' });
-    if (cpa > currentResult.maxCPA) issues.push({ type: 'error', label: 'CPA ALTO', msg: 'Você está no prejuízo por venda.' });
-
-    let scaleGuidance = 'Mantenha os testes.';
-    if (profit > 0 && roas > 3 && cpa < currentResult.cpaIdeal) scaleGuidance = 'ESCALA LIBERADA: Aumente o budget em 20%.';
-    else if (profit < 0) scaleGuidance = 'ALERTA: Reduza o budget ou congele a campanha.';
-    else if (cpa > currentResult.maxCPA) scaleGuidance = 'PERIGO: CPA furando o breakeven.';
-
-    return { budget, impressions, clicks, atc, ic, sales, revenue, profit, cpa, roas, cpc, ctr, cvr, atcRate, icRate, cpm, issues, dailyData: [], scaleGuidance, summaryByPhase };
-  }, [planningCampaigns, currentResult, pricingData]);
-
   const scaleResult = useMemo(() => {
-    const scaledData = {
+    return calculatePricing({
       ...pricingData,
-      estimatedMonthlySales: pricingData.estimatedMonthlySales * scaleMultiplier,
-      fixedOpCost: pricingData.fixedOpCost * (1 + (scaleMultiplier * 0.1))
-    };
-    return calculatePricing(scaledData, pricingData.desiredMarkup, platform);
+      estimatedMonthlySales: pricingData.estimatedMonthlySales * scaleMultiplier
+    }, pricingData.desiredMarkup, platform);
   }, [pricingData, platform, scaleMultiplier]);
+
+  // Planning Campaigns Helpers
+  const addPlanningCampaign = (phase?: string) => {
+    const newCamp: CampaignInput = {
+      id: 'camp_' + Date.now(),
+      name: `Campanha #${planningCampaigns.length + 1} (${phase || 'Validação'})`,
+      spend: 100,
+      impressions: 2500,
+      clicks: 120,
+      atc: 18,
+      ic: 8,
+      sales: 4,
+      active: true,
+      phase: phase || 'Escala'
+    };
+    setPlanningCampaigns([...planningCampaigns, newCamp]);
+  };
+
+  const updatePlanningCampaign = (id: string, updates: Partial<CampaignInput>) => {
+    setPlanningCampaigns(planningCampaigns.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
+  const removePlanningCampaign = (id: string) => {
+    setPlanningCampaigns(planningCampaigns.filter(c => c.id !== id));
+  };
+
+  const toggleSelectAllPlanning = (selected: boolean) => {
+    setPlanningCampaigns(planningCampaigns.map(c => ({ ...c, active: selected })));
+  };
+
+  const savePlanningSimulation = () => {
+    const record = {
+      id: 'sim_' + Date.now(),
+      date: new Date().toLocaleDateString('pt-BR'),
+      campaignsCount: planningCampaigns.length,
+      productName: pricingData.productName,
+      markup: pricingData.desiredMarkup
+    };
+    setPlanningHistory([record, ...planningHistory]);
+  };
+
+  const saveProduct = () => {
+    const updated = savedProducts.filter(p => p.productName !== pricingData.productName);
+    setSavedProducts([...updated, pricingData]);
+  };
+
+  const loadProduct = (p: PricingData) => {
+    setPricingData(p);
+  };
+
+  const deleteProduct = (name: string) => {
+    setSavedProducts(savedProducts.filter(p => p.productName !== name));
+  };
+
+  const handleSaveQuickIncome = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickDesc.trim() || !quickAmount) return;
+
+    const acc = financeStore.accounts.find(a => a.id === quickAccId) || financeStore.accounts[0];
+
+    await financeStore.addTransaction({
+      description: quickDesc.trim(),
+      amount: parseFloat(quickAmount.replace(',', '.')) || 0,
+      type: 'income',
+      category: quickCat || 'Salário & Renda',
+      accountId: acc?.id || '',
+      accountName: acc?.name || 'Conta Principal',
+      date: quickDate || new Date().toISOString().split('T')[0],
+      status: 'paid',
+      mode
+    });
+
+    setIsGlobalIncomeModalOpen(false);
+    setQuickDesc('');
+    setQuickAmount('');
+  };
+
+  const handleSaveQuickExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickDesc.trim() || !quickAmount) return;
+
+    const acc = financeStore.accounts.find(a => a.id === quickAccId) || financeStore.accounts[0];
+
+    await financeStore.addTransaction({
+      description: quickDesc.trim(),
+      amount: parseFloat(quickAmount.replace(',', '.')) || 0,
+      type: 'expense',
+      category: quickCat || 'Alimentação & Mercado',
+      accountId: acc?.id || '',
+      accountName: acc?.name || 'Conta Principal',
+      date: quickDate || new Date().toISOString().split('T')[0],
+      status: 'paid',
+      mode
+    });
+
+    setIsGlobalExpenseModalOpen(false);
+    setQuickDesc('');
+    setQuickAmount('');
+  };
 
   if (currentView === 'landing') {
     return (
-      <SalesLandingPage 
+      <SalesLandingPage
         onEnterPlatform={() => setCurrentView('app')}
         currentUser={currentUser}
-        onLoginSuccess={(user) => {
-          if (user) setCurrentUser(user);
+        onLoginSuccess={(u) => setCurrentUser(u)}
+        onOpenAdmin={() => setCurrentView('admin')}
+      />
+    );
+  }
+
+  if (currentView === 'admin' || activeTab === 'admin') {
+    return (
+      <AdminDashboard
+        currentUser={currentUser}
+        onOpenLanding={() => setCurrentView('landing')}
+        onSwitchToApp={() => {
+          setCurrentView('app');
+          if (activeTab === 'admin') setActiveTab('overview');
+        }}
+        onLoginSuccess={(u) => setCurrentUser(u)}
+        onLogout={() => {
+          handleLogout();
         }}
       />
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] text-black font-['Plus_Jakarta_Sans']">
-      <Sidebar 
+    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased overflow-hidden">
+      {/* Sidebar with CFO Suite at Top and Financial modules below */}
+      <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        platform={platform}
-        setPlatform={setPlatform}
         currentUser={currentUser}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <Header 
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          platform={platform}
-          pricingData={pricingData}
-          setPricingData={setPricingData}
-          currentResult={currentResult}
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Header with Margem Líquida, Platform, Currency and Avatar */}
+        <Header
           currentUser={currentUser}
+          marginPercent={calculationResult.marginPercent}
+          netProfit={calculationResult.netProfit}
+          currencySymbol={pricingData.currency === 'USD' ? '$' : pricingData.currency === 'EUR' ? '€' : 'R$'}
+          platform={platform}
+          setPlatform={setPlatform}
+          currency={pricingData.currency}
+          setCurrency={(c) => setPricingData({ ...pricingData, currency: c })}
+          onOpenAuthModal={() => {
+            setAuthModalMode('login');
+            setIsAuthModalOpen(true);
+          }}
+          onNavigateProfile={() => setActiveTab('perfil')}
+          onOpenLanding={() => setCurrentView('landing')}
+          onOpenAdmin={() => setCurrentView('admin')}
+          onLogout={handleLogout}
         />
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-slate-50/30">
+        {/* Scrollable Viewport */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+          {/* 1. Original E-commerce CFO Tools */}
           {activeTab === 'overview' && (
-            <PricingCalculator 
+            <PricingCalculator
               pricingData={pricingData}
               setPricingData={setPricingData}
-              currentResult={currentResult}
               platform={platform}
-            />
-          )}
-
-          {activeTab === 'simulation' && (
-            <ScaleSimulation 
-              pricingData={pricingData}
-              currentResult={currentResult}
-              scaleResult={scaleResult}
-              scaleMultiplier={scaleMultiplier}
-              setScaleMultiplier={setScaleMultiplier}
+              currentResult={calculationResult}
             />
           )}
 
           {activeTab === 'planning' && (
-            <ScalePlanning 
+            <ScalePlanning
               pricingData={pricingData}
               setPricingData={setPricingData}
               planningCampaigns={planningCampaigns}
-              planningDiagnostic={planningDiagnostic}
+              planningDiagnostic={{}}
               planningHistory={planningHistory}
               savedProducts={savedProducts}
               saveProduct={saveProduct}
@@ -473,44 +363,48 @@ export default function App() {
           )}
 
           {activeTab === 'compass' && (
-            <MetricsCompass 
+            <MetricsCompass
               pricingData={pricingData}
-              currentResult={currentResult}
+              currentResult={calculationResult}
             />
           )}
 
           {activeTab === 'dre' && (
-            <DREFinancialStatement 
+            <DREFinancialStatement
               pricingData={pricingData}
-              currentResult={currentResult}
+              currentResult={calculationResult}
+            />
+          )}
+
+          {activeTab === 'simulation' && (
+            <ScaleSimulation
+              pricingData={pricingData}
+              currentResult={calculationResult}
+              scaleResult={scaleResult}
+              scaleMultiplier={scaleMultiplier}
+              setScaleMultiplier={setScaleMultiplier}
             />
           )}
 
           {activeTab === 'gamification' && (
-            <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
-              <AffiliateGamification 
-                pricingData={pricingData} 
-                currentResult={currentResult} 
-              />
-            </div>
-          )}
-
-          {activeTab === 'settings' && (
-            <SettingsAccount 
-              currentUser={currentUser}
-              setCurrentUser={setCurrentUser}
+            <AffiliateGamification
               pricingData={pricingData}
-              setPricingData={setPricingData}
-              savedProductsCount={savedProducts.length}
-              campaignsCount={planningCampaigns.length}
+              currentResult={calculationResult}
             />
           )}
 
           {activeTab === 'agent' && (
-            <AgentAdvisor 
+            <AgentAdvisor
               platform={platform}
               pricingData={pricingData}
-              currentResult={currentResult}
+              currentResult={calculationResult}
+              savedProducts={savedProducts}
+              planningCampaigns={planningCampaigns}
+              planningHistory={planningHistory}
+              scaleMultiplier={scaleMultiplier}
+              scaleResult={scaleResult}
+              financeStore={financeStore}
+              financialMode={mode}
               currentUser={currentUser}
               setCurrentUser={setCurrentUser}
               openAuthModal={() => {
@@ -519,16 +413,378 @@ export default function App() {
               }}
             />
           )}
-        </div>
-      </main>
 
+          {activeTab === 'settings' && (
+            <SettingsAccount
+              currentUser={currentUser}
+              setCurrentUser={setCurrentUser}
+              pricingData={pricingData}
+              setPricingData={setPricingData}
+              savedProductsCount={savedProducts.length}
+              campaignsCount={planningCampaigns.length}
+              onLogout={handleLogout}
+            />
+          )}
+
+          {/* 2. Gestão Financeira Pessoal & Empresarial (Abaixo) */}
+          {activeTab === 'painel' && (
+            <FinanceOverview
+              mode={mode}
+              metrics={financeStore.metrics}
+              transactions={financeStore.transactions}
+              onOpenNewIncome={() => {
+                setQuickCat('Salário & Renda');
+                setIsGlobalIncomeModalOpen(true);
+              }}
+              onOpenNewExpense={() => {
+                setQuickCat('Alimentação & Mercado');
+                setIsGlobalExpenseModalOpen(true);
+              }}
+              onNavigateTab={(t) => {
+                if (t === 'agente') setActiveTab('agente_chat');
+                else setActiveTab(t as AppTab);
+              }}
+            />
+          )}
+
+          {activeTab === 'agente_chat' && (
+            <FinanceAgentChat
+              mode={mode}
+              accounts={financeStore.accounts}
+              onAddTransaction={financeStore.addTransaction}
+              currentUser={currentUser}
+            />
+          )}
+
+          {activeTab === 'agenda' && (
+            <FinanceCalendar
+              mode={mode}
+              transactions={financeStore.transactions}
+              onToggleStatus={financeStore.updateTransactionStatus}
+              onOpenNewTransaction={() => setIsGlobalExpenseModalOpen(true)}
+            />
+          )}
+
+          {activeTab === 'contas' && (
+            <FinanceAccounts
+              mode={mode}
+              accounts={financeStore.accounts}
+              onAddAccount={financeStore.addAccount}
+              onDeleteAccount={financeStore.deleteAccount}
+            />
+          )}
+
+          {activeTab === 'receitas' && (
+            <FinanceIncomes
+              mode={mode}
+              accounts={financeStore.accounts}
+              categories={financeStore.categories}
+              transactions={financeStore.transactions}
+              onAddTransaction={financeStore.addTransaction}
+              onDeleteTransaction={financeStore.deleteTransaction}
+              onToggleStatus={financeStore.updateTransactionStatus}
+            />
+          )}
+
+          {activeTab === 'despesas' && (
+            <FinanceExpenses
+              mode={mode}
+              accounts={financeStore.accounts}
+              categories={financeStore.categories}
+              transactions={financeStore.transactions}
+              onAddTransaction={financeStore.addTransaction}
+              onDeleteTransaction={financeStore.deleteTransaction}
+              onToggleStatus={financeStore.updateTransactionStatus}
+            />
+          )}
+
+          {activeTab === 'transacoes' && (
+            <FinanceTransactions
+              mode={mode}
+              accounts={financeStore.accounts}
+              transactions={financeStore.transactions}
+              onDeleteTransaction={financeStore.deleteTransaction}
+              onToggleStatus={financeStore.updateTransactionStatus}
+            />
+          )}
+
+          {activeTab === 'dividas' && (
+            <FinanceDebts
+              mode={mode}
+              debts={financeStore.debts}
+              onAddDebt={financeStore.addDebt}
+              onPayInstallment={financeStore.recordDebtPayment}
+            />
+          )}
+
+          {activeTab === 'categorias' && (
+            <FinanceCategories
+              mode={mode}
+              categories={financeStore.categories}
+              onAddCategory={financeStore.addCategory}
+            />
+          )}
+
+          {activeTab === 'relatorios' && (
+            <FinanceReports
+              mode={mode}
+              metrics={financeStore.metrics}
+              transactions={financeStore.transactions}
+            />
+          )}
+
+          {activeTab === 'metas' && (
+            <FinanceGoals
+              mode={mode}
+              goals={financeStore.goals}
+              onAddGoal={financeStore.addGoal}
+              onDeposit={financeStore.depositGoal}
+            />
+          )}
+
+          {activeTab === 'mercado' && (
+            <FinanceMarket
+              mode={mode}
+              items={financeStore.marketItems}
+              onAddItem={financeStore.addMarketItem}
+              onToggleItem={financeStore.toggleMarketItem}
+              onDeleteItem={financeStore.deleteMarketItem}
+            />
+          )}
+
+          {activeTab === 'veiculos' && (
+            <FinanceVehicles
+              mode={mode}
+              vehicles={financeStore.vehicles}
+              expenses={financeStore.vehicleExpenses}
+              onAddVehicle={financeStore.addVehicle}
+              onAddExpense={financeStore.addVehicleExpense}
+            />
+          )}
+
+          {activeTab === 'perfil' && (
+            <FinanceProfile
+              currentUser={currentUser}
+              mode={mode}
+              setMode={handleSetMode}
+              onOpenAuthModal={() => {
+                setAuthModalMode('login');
+                setIsAuthModalOpen(true);
+              }}
+              onLogout={handleLogout}
+              onNavigateCfoTools={(tool) => {
+                if (tool === 'overview') setActiveTab('overview');
+                if (tool === 'planning') setActiveTab('planning');
+                if (tool === 'compass') setActiveTab('compass');
+                if (tool === 'dre') setActiveTab('dre');
+                if (tool === 'simulation') setActiveTab('simulation');
+              }}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Quick Global Nova Receita Modal */}
+      {isGlobalIncomeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-extrabold text-slate-900">Nova Receita</h3>
+              <button
+                onClick={() => setIsGlobalIncomeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickIncome} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700">Descrição</label>
+                <input
+                  required
+                  placeholder="Ex: Salário, Venda, Pix Recebido"
+                  value={quickDesc}
+                  onChange={e => setQuickDesc(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Valor (R$)</label>
+                  <input
+                    required
+                    placeholder="0,00"
+                    value={quickAmount}
+                    onChange={e => setQuickAmount(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Data</label>
+                  <input
+                    type="date"
+                    value={quickDate}
+                    onChange={e => setQuickDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Categoria</label>
+                  <select
+                    value={quickCat}
+                    onChange={e => setQuickCat(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  >
+                    <option value="Salário & Renda">Salário & Renda</option>
+                    <option value="Vendas & Serviços">Vendas & Serviços</option>
+                    <option value="Investimentos">Investimentos</option>
+                    <option value="Outras Receitas">Outras Receitas</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Conta</label>
+                  <select
+                    value={quickAccId}
+                    onChange={e => setQuickAccId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  >
+                    {financeStore.accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                    {financeStore.accounts.length === 0 && <option value="">Conta Padrão</option>}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsGlobalIncomeModalOpen(false)}
+                  className="px-4 py-2 border rounded-xl text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20"
+                >
+                  Salvar Receita
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Global Nova Despesa Modal */}
+      {isGlobalExpenseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-extrabold text-slate-900">Nova Despesa</h3>
+              <button
+                onClick={() => setIsGlobalExpenseModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickExpense} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700">Descrição</label>
+                <input
+                  required
+                  placeholder="Ex: Aluguel, Mercado, Uber, Almoço"
+                  value={quickDesc}
+                  onChange={e => setQuickDesc(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Valor (R$)</label>
+                  <input
+                    required
+                    placeholder="0,00"
+                    value={quickAmount}
+                    onChange={e => setQuickAmount(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-rose-600"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Data</label>
+                  <input
+                    type="date"
+                    value={quickDate}
+                    onChange={e => setQuickDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Categoria</label>
+                  <select
+                    value={quickCat}
+                    onChange={e => setQuickCat(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  >
+                    <option value="Alimentação & Mercado">Alimentação & Mercado</option>
+                    <option value="Moradia & Contas">Moradia & Contas</option>
+                    <option value="Transporte & Veículo">Transporte & Veículo</option>
+                    <option value="Lazer & Delivery">Lazer & Delivery</option>
+                    <option value="Saúde & Farmácia">Saúde & Farmácia</option>
+                    <option value="Outras Despesas">Outras Despesas</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700">Conta</label>
+                  <select
+                    value={quickAccId}
+                    onChange={e => setQuickAccId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs"
+                  >
+                    {financeStore.accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                    {financeStore.accounts.length === 0 && <option value="">Conta Padrão</option>}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsGlobalExpenseModalOpen(false)}
+                  className="px-4 py-2 border rounded-xl text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-600/20"
+                >
+                  Salvar Despesa
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Auth Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
-        initialMode={authModalMode}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(user) => {
-          if (user) setCurrentUser(user);
-        }}
+        initialMode={authModalMode}
       />
     </div>
   );
