@@ -284,18 +284,34 @@ export default function App() {
 
   if (currentView === 'admin' || activeTab === 'admin') {
     return (
-      <AdminDashboard
-        currentUser={currentUser}
-        onOpenLanding={() => setCurrentView('landing')}
-        onSwitchToApp={() => {
-          setCurrentView('app');
-          if (activeTab === 'admin') setActiveTab('overview');
-        }}
-        onLoginSuccess={(u) => setCurrentUser(u)}
-        onLogout={() => {
-          handleLogout();
-        }}
-      />
+      <div className="relative">
+        <AdminDashboard
+          currentUser={currentUser}
+          onOpenLanding={() => setCurrentView('landing')}
+          onSwitchToApp={() => {
+            setCurrentView('app');
+            if (activeTab === 'admin') setActiveTab('overview');
+          }}
+          onLoginSuccess={(u) => setCurrentUser(u)}
+          onOpenAuthModal={() => {
+            setAuthModalMode('login');
+            setIsAuthModalOpen(true);
+          }}
+          onLogout={() => {
+            handleLogout();
+          }}
+        />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onSuccess={(u) => {
+            if (u) setCurrentUser(u);
+            setIsAuthModalOpen(false);
+          }}
+          initialMode="login"
+          hideRegister={true}
+        />
+      </div>
     );
   }
 
@@ -784,6 +800,10 @@ export default function App() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={(u) => {
+          if (u) setCurrentUser(u);
+          setIsAuthModalOpen(false);
+        }}
         initialMode={authModalMode}
       />
     </div>

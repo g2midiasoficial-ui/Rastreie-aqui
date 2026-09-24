@@ -18,15 +18,17 @@ interface AuthModalProps {
   onClose: () => void;
   onSuccess: (userData?: any) => void;
   initialMode?: 'login' | 'register';
+  hideRegister?: boolean;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  initialMode = 'login'
+  initialMode = 'login',
+  hideRegister = false
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register'>(hideRegister ? 'login' : initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,6 +47,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const checkIsAdmin = (emailToCheck?: string | null) => {
+    if (!emailToCheck) return false;
+    const lower = emailToCheck.toLowerCase().trim();
+    return lower === 'betosouza3322@gmail.com';
+  };
+
   const handleDirectGoogleConnect = async (customEmail?: string, customName?: string) => {
     setLoading(true);
     setError(null);
@@ -53,13 +61,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const emailToUse = customEmail?.trim() || email.trim() || 'g2midiasoficial@gmail.com';
     const nameToUse = customName?.trim() || name.trim() || emailToUse.split('@')[0];
     const generatedUid = 'google_' + btoa(emailToUse).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const isAdmin = checkIsAdmin(emailToUse);
 
     const userPayload = {
       uid: generatedUid,
       displayName: nameToUse,
       email: emailToUse,
       photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=0284c7,3b82f6`,
-      provider: 'google'
+      provider: 'google',
+      role: isAdmin ? 'admin' : 'user',
+      plan: isAdmin ? 'lifetime' : 'pro_annual'
     };
 
     try {
@@ -69,6 +80,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         displayName: nameToUse,
         photoURL: userPayload.photoURL,
         provider: 'google',
+        role: userPayload.role,
+        plan: userPayload.plan,
         connectedAt: serverTimestamp(),
         lastLogin: serverTimestamp()
       }, { merge: true });
@@ -94,12 +107,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       
+      const userEmail = result.user.email || '';
+      const isAdmin = checkIsAdmin(userEmail);
+
       const userPayload = {
         uid: result.user.uid,
         displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Google',
-        email: result.user.email || '',
+        email: userEmail,
         photoURL: result.user.photoURL || undefined,
-        provider: 'google'
+        provider: 'google',
+        role: isAdmin ? 'admin' : 'user',
+        plan: isAdmin ? 'lifetime' : 'pro_annual'
       };
 
       try {
@@ -109,6 +127,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           displayName: userPayload.displayName,
           photoURL: result.user.photoURL,
           provider: 'google',
+          role: userPayload.role,
+          plan: userPayload.plan,
           lastLogin: serverTimestamp()
         }, { merge: true });
       } catch (e) {
@@ -180,11 +200,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           }
         }
 
+        const isAdmin = checkIsAdmin(cleanEmail);
         const userPayload = {
           uid: userRecord.uid,
           displayName: name.trim() || cleanEmail.split('@')[0],
           email: cleanEmail,
-          provider: 'password'
+          provider: 'password',
+          role: isAdmin ? 'admin' : 'user',
+          plan: isAdmin ? 'lifetime' : 'pro_annual'
         };
 
         try {
@@ -193,6 +216,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             email: cleanEmail,
             displayName: userPayload.displayName,
             provider: 'password',
+            role: userPayload.role,
+            plan: userPayload.plan,
             createdAt: serverTimestamp(),
             lastLogin: serverTimestamp()
           }, { merge: true });
@@ -211,13 +236,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         // Modo Login
         const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
         const userRecord = userCred.user;
+        const isAdmin = checkIsAdmin(cleanEmail);
 
         const userPayload = {
           uid: userRecord.uid,
           displayName: userRecord.displayName || cleanEmail.split('@')[0],
           email: cleanEmail,
           photoURL: userRecord.photoURL || undefined,
-          provider: 'password'
+          provider: 'password',
+          role: isAdmin ? 'admin' : 'user',
+          plan: isAdmin ? 'lifetime' : 'pro_annual'
         };
 
         try {
@@ -225,6 +253,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             uid: userRecord.uid,
             email: cleanEmail,
             displayName: userPayload.displayName,
+            role: userPayload.role,
+            plan: userPayload.plan,
             lastLogin: serverTimestamp()
           }, { merge: true });
         } catch (e) {
@@ -313,30 +343,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         <div className="p-7 space-y-5">
           {/* Alternador de Modo Login / Cadastro */}
-          <div className="grid grid-cols-2 p-1.5 bg-slate-100 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
-              className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
-                mode === 'login' 
-                  ? 'bg-white text-blue-700 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Entrar (Login)
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode('register'); setError(null); setSuccessMsg(null); }}
-              className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
-                mode === 'register' 
-                  ? 'bg-white text-blue-700 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Criar Conta
-            </button>
-          </div>
+          {!hideRegister ? (
+            <div className="grid grid-cols-2 p-1.5 bg-slate-100 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
+                className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                  mode === 'login' 
+                    ? 'bg-white text-blue-700 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Entrar (Login)
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('register'); setError(null); setSuccessMsg(null); }}
+                className={`py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${
+                  mode === 'register' 
+                    ? 'bg-white text-blue-700 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Criar Conta
+              </button>
+            </div>
+          ) : null}
 
           {error && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-700 text-xs font-bold animate-in fade-in">
@@ -375,8 +407,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* Botões Google Login */}
-          <div className="space-y-2">
+          {/* Botão Google Login */}
+          <div>
             <button
               type="button"
               onClick={handleGoogleLogin}
@@ -390,16 +422,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
               </svg>
               <span>{loading ? 'Conectando...' : 'Continuar com Conta Google'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleDirectGoogleConnect('g2midiasoficial@gmail.com', 'G2 Mídias Oficial')}
-              disabled={loading}
-              className="w-full py-2.5 px-4 bg-blue-50/70 hover:bg-blue-100/80 border border-blue-200/80 text-blue-900 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Sparkles size={14} className="text-blue-600" />
-              <span>⚡ Conectar g2midiasoficial@gmail.com (Sem Pop-up)</span>
             </button>
           </div>
 
