@@ -271,12 +271,22 @@ export default function App() {
     setQuickAmount('');
   };
 
-  if (currentView === 'landing') {
+  if (currentView === 'landing' || (!currentUser && currentView === 'app')) {
     return (
       <SalesLandingPage
-        onEnterPlatform={() => setCurrentView('app')}
+        onEnterPlatform={() => {
+          if (currentUser) {
+            setCurrentView('app');
+          } else {
+            setAuthModalMode('login');
+            setIsAuthModalOpen(true);
+          }
+        }}
         currentUser={currentUser}
-        onLoginSuccess={(u) => setCurrentUser(u)}
+        onLoginSuccess={(u) => {
+          setCurrentUser(u);
+          setCurrentView('app');
+        }}
         onOpenAdmin={() => setCurrentView('admin')}
       />
     );

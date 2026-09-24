@@ -70,48 +70,28 @@ export function SalesLandingPage({
       
       const userPayload = {
         uid: result.user.uid,
-        displayName: result.user.displayName || 'Lojista Conectado',
-        email: result.user.email || 'lojista@google.com',
+        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Conectado',
+        email: result.user.email || '',
         photoURL: result.user.photoURL,
         provider: 'google'
       };
       
       saveUserSession(userPayload);
       onLoginSuccess(userPayload);
-      setAuthSuccess('Autenticado com sucesso! Redirecionando...');
+      setAuthSuccess('Autenticado com sucesso via Google! Entrando...');
       setTimeout(() => {
         onEnterPlatform();
-      }, 600);
+      }, 500);
     } catch (err: any) {
+      console.error('Google Auth Error:', err);
       const isAbortOrClosed = 
         err?.code === 'auth/popup-closed-by-user' || 
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.toLowerCase().includes('aborted') ||
-        err?.message?.toLowerCase().includes('user aborted') ||
-        err?.name === 'AbortError';
+        err?.code === 'auth/cancelled-popup-request';
 
       if (isAbortOrClosed) {
-        setAuthError('O processo de login com o Google foi cancelado.');
-      } else if (
-        err?.code === 'auth/popup-blocked' || 
-        err?.code === 'auth/unauthorized-domain' ||
-        err?.message?.includes('popup')
-      ) {
-        const fallbackUser = {
-          uid: 'google_user_' + Date.now().toString().slice(-6),
-          displayName: 'Lojista Google Pro',
-          email: 'lojista.pro@gmail.com',
-          photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          provider: 'google'
-        };
-        saveUserSession(fallbackUser);
-        onLoginSuccess(fallbackUser);
-        setAuthSuccess('Acesso concedido com sucesso!');
-        setTimeout(() => {
-          onEnterPlatform();
-        }, 600);
+        setAuthError('O login com o Google foi cancelado pela janela pop-up.');
       } else {
-        setAuthError('Não foi possível conectar com o Google. Utilize o e-mail abaixo.');
+        setAuthError('Não foi possível autenticar com o Google. Por favor, entre com e-mail e senha.');
       }
     } finally {
       setLoading(false);
@@ -128,7 +108,7 @@ export function SalesLandingPage({
     const cleanPassword = authPassword.trim();
 
     if (!cleanEmail || !cleanPassword) {
-      setAuthError('Por favor, preencha todos os campos.');
+      setAuthError('Por favor, preencha o e-mail e a senha.');
       setLoading(false);
       return;
     }
@@ -139,31 +119,46 @@ export function SalesLandingPage({
       return;
     }
 
+    // Admin Master direct access
+    if (cleanEmail.toLowerCase() === 'betosouza3322@gmail.com' && cleanPassword === 'Beto54321@') {
+      const adminPayload = {
+        uid: 'admin_betosouza',
+        displayName: 'Beto Souza (Admin Master)',
+        email: 'Betosouza3322@gmail.com',
+        photoURL: 'https://api.dicebear.com/7.x/initials/svg?seed=Beto%20Souza&backgroundColor=f59e0b,d97706',
+        role: 'admin',
+        plan: 'lifetime',
+        provider: 'password'
+      };
+      saveUserSession(adminPayload);
+      onLoginSuccess(adminPayload);
+      setAuthSuccess('Acesso de Administrador Master liberado!');
+      setTimeout(() => {
+        onEnterPlatform();
+      }, 400);
+      setLoading(false);
+      return;
+    }
+
     try {
       if (authMode === 'register') {
-        let userRecord: any = null;
-        try {
-          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-          if (authName.trim() && userRecord) {
+        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        const userRecord = userCred.user;
+        if (authName.trim() && userRecord) {
+          try {
             await updateProfile(userRecord, { displayName: authName.trim() });
-          }
-        } catch (firebaseErr: any) {
-          if (firebaseErr.code === 'auth/email-already-in-use') {
-            try {
-              const loginCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-              userRecord = loginCred.user;
-            } catch {
-              // fallback
-            }
+          } catch (profileErr) {
+            console.warn(profileErr);
           }
         }
 
         const userPayload = {
-          uid: userRecord?.uid || 'user_' + Math.random().toString(36).substring(2, 9),
+          uid: userRecord.uid,
           displayName: authName.trim() || cleanEmail.split('@')[0],
           email: cleanEmail,
-          provider: 'password'
+          provider: 'password',
+          role: 'user',
+          plan: 'pro_annual'
         };
 
         saveUserSession(userPayload);
@@ -171,28 +166,19 @@ export function SalesLandingPage({
         setAuthSuccess('Conta criada com sucesso! Entrando...');
         setTimeout(() => {
           onEnterPlatform();
-        }, 600);
+        }, 500);
       } else {
-        let userRecord: any = null;
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-        } catch (firebaseErr: any) {
-          if (firebaseErr.code === 'auth/user-not-found' || firebaseErr.code === 'auth/invalid-credential') {
-            try {
-              const createdCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-              userRecord = createdCred.user;
-            } catch {
-              // fallback
-            }
-          }
-        }
+        const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        const userRecord = userCred.user;
 
         const userPayload = {
-          uid: userRecord?.uid || 'user_' + Math.random().toString(36).substring(2, 9),
-          displayName: userRecord?.displayName || cleanEmail.split('@')[0],
+          uid: userRecord.uid,
+          displayName: userRecord.displayName || cleanEmail.split('@')[0],
           email: cleanEmail,
-          provider: 'password'
+          photoURL: userRecord.photoURL,
+          provider: 'password',
+          role: cleanEmail.toLowerCase() === 'betosouza3322@gmail.com' ? 'admin' : 'user',
+          plan: cleanEmail.toLowerCase() === 'betosouza3322@gmail.com' ? 'lifetime' : 'pro_annual'
         };
 
         saveUserSession(userPayload);
@@ -200,10 +186,23 @@ export function SalesLandingPage({
         setAuthSuccess('Login realizado com sucesso! Entrando...');
         setTimeout(() => {
           onEnterPlatform();
-        }, 600);
+        }, 500);
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Erro ao processar login. Verifique seus dados.');
+      console.error('Email Auth Error:', err);
+      let message = 'E-mail ou senha incorretos.';
+      if (err.code === 'auth/email-already-in-use') {
+        message = 'Este e-mail já está cadastrado. Alterne para o modo de Login.';
+      } else if (err.code === 'auth/invalid-email') {
+        message = 'Formato de e-mail inválido.';
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = 'E-mail ou senha incorretos. Verifique suas credenciais.';
+      } else if (err.code === 'auth/weak-password') {
+        message = 'A senha informada é muito fraca.';
+      } else if (err.message) {
+        message = err.message;
+      }
+      setAuthError(message);
     } finally {
       setLoading(false);
     }
