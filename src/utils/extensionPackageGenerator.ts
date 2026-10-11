@@ -45,24 +45,11 @@ export function generateExtensionFiles(
   const defaultSfpPercent = defaultPricing?.sfpPercent !== undefined ? defaultPricing.sfpPercent : 6;
   const defaultSfpEnabled = defaultPricing?.sfpEnabled !== false;
 
-  // Build embedded auth state if currentUser is provided
-  const embeddedUser: ExtensionUserSession | null = currentUser?.email ? {
-    uid: currentUser.uid || `usr_${currentUser.email.replace(/[^a-z0-9]/gi, '_')}`,
-    email: currentUser.email,
-    displayName: currentUser.displayName || currentUser.name || currentUser.email.split('@')[0],
-    role: currentUser.role || 'user',
-    plan: currentUser.plan || 'pro_annual',
-    token: `gp_tok_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`,
-    connectedAt: new Date().toISOString(),
-    defaultSettings: {
-      defaultMarkup: defaultMarkup,
-      defaultTax: defaultTax,
-      defaultAds: defaultAds,
-      preferredPlatform: 'dropshipping',
-      sfpEnabled: defaultSfpEnabled,
-      sfpPercent: defaultSfpPercent
-    }
-  } : null;
+  // A extensão faz login direto no Supabase do projeto (chave publicável, segura para o cliente)
+  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || '';
+  const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) || '';
+  const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://www.gerenciie.com.br';
+  void currentUser;
 
   const manifest = JSON.stringify({
     "manifest_version": 3,
@@ -89,6 +76,7 @@ export function generateExtensionFiles(
       "scripting"
     ],
     "host_permissions": [
+      ...(supabaseUrl ? [`${supabaseUrl}/*`] : []),
       "https://*.aliexpress.com/*",
       "https://*.shopee.com.br/*",
       "https://*.mercadolivre.com.br/*",
@@ -126,7 +114,6 @@ export function generateExtensionFiles(
     }
   }, null, 2);
 
-  const initialUserJson = JSON.stringify(embeddedUser);
 
   const popupHtml = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -145,30 +132,22 @@ export function generateExtensionFiles(
     <!-- SCREEN 1: AUTH / LOGIN GATEWAY (SHOWN FIRST IF NOT LOGGED IN) -->
     <div id="screenLogin" class="auth-gateway">
       <div class="auth-brand">
-        <div class="auth-logo-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6Z"/></svg>
-        </div>
+        <img src="icons/icon128.png" alt="" class="auth-logo-img">
         <h1 class="auth-title">GERENCIIE <span>PRO</span></h1>
         <span class="auth-tag">CFO & E-commerce Suite</span>
       </div>
 
       <div class="auth-welcome-card">
         <h3>Acesse sua Conta</h3>
-        <p>Faça login para desbloquear a calculadora de preços oficial com as regras e taxas do seu projeto.</p>
+        <p>Entre com o mesmo e-mail e senha que você usa no site do Gerenciie Pro.</p>
       </div>
 
-      <div class="auth-type-tabs">
-        <button class="auth-type-btn active" id="btnTabEmailLogin">E-mail & Senha</button>
-        <button class="auth-type-btn" id="btnTabTokenLogin">Token Rápido</button>
-      </div>
-
-      <!-- Form 1: Email/Password Login -->
       <form id="formEmailAuth" class="auth-form">
         <div class="field-block">
           <label>E-mail Cadastrado</label>
           <div class="input-with-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-            <input type="email" id="inpGatewayEmail" placeholder="seuemail@exemplo.com" value="g2midiasoficial@gmail.com" required>
+            <input type="email" id="inpGatewayEmail" placeholder="seuemail@exemplo.com" autocomplete="email" required>
           </div>
         </div>
 
@@ -176,39 +155,26 @@ export function generateExtensionFiles(
           <label>Senha de Acesso</label>
           <div class="input-with-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <input type="password" id="inpGatewayPassword" placeholder="••••••••" value="gerenciie123" required>
+            <input type="password" id="inpGatewayPassword" placeholder="••••••••" autocomplete="current-password" required>
           </div>
         </div>
+
+        <div id="authErrorBanner" class="auth-status-alert hidden"></div>
 
         <button type="submit" id="btnSubmitGateway" class="btn-submit-auth">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
           <span>Entrar no Sistema</span>
         </button>
 
-        <button type="button" id="btnQuickDemoLogin" class="btn-demo-auth">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Conectar Conta Ativa (1-Clique)</span>
+        <button type="button" id="btnOpenSignup" class="btn-demo-auth">
+          <span>Não tem conta? Criar conta grátis no site</span>
         </button>
       </form>
 
-      <!-- Form 2: Token Login -->
-      <form id="formTokenAuth" class="auth-form hidden">
-        <div class="field-block">
-          <label>Chave / Token de Pareamento Gerenciie Pro</label>
-          <textarea id="inpGatewayToken" rows="3" placeholder="Cole sua chave gerada no painel da plataforma..."></textarea>
-          <span class="field-hint">Copie seu token no painel web do Gerenciie Pro.</span>
-        </div>
-
-        <button type="submit" class="btn-submit-auth">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Validar Token e Acessar</span>
-        </button>
-      </form>
-
-      <div id="authErrorBanner" class="auth-status-alert hidden"></div>
+      <p class="auth-google-hint">Entrou no site com o Google? Defina uma senha no site em <strong>Extensão Chrome → Conexão &amp; Login</strong>.</p>
 
       <div class="auth-footer-note">
-        <span>🔒 Gerenciie Pro • Conexão Criptografada</span>
+        <span>🔒 Login seguro com a sua conta Gerenciie Pro</span>
       </div>
     </div>
 
@@ -218,9 +184,7 @@ export function generateExtensionFiles(
       <!-- Top Bar -->
       <header class="ext-header">
         <div class="logo-area">
-          <div class="logo-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6Z"/></svg>
-          </div>
+          <img src="icons/icon48.png" alt="" class="logo-img">
           <div>
             <h1 class="logo-title">GERENCIIE <span>PRO</span></h1>
             <p class="logo-sub">Precificação & Margem Real</p>
@@ -526,9 +490,6 @@ export function generateExtensionFiles(
     </div>
   </div>
 
-  <script>
-    window.__GERENCIIE_PRELOADED_USER__ = ${initialUserJson};
-  </script>
   <script src="popup.js"></script>
 </body>
 </html>`;
@@ -806,6 +767,40 @@ textarea:focus {
   font-size: 9.5px;
   font-weight: 700;
   text-align: center;
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.auth-logo-img {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.45);
+}
+
+.logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.auth-google-hint {
+  font-size: 9px;
+  line-height: 1.45;
+  color: #94a3b8;
+  text-align: center;
+  padding: 0 6px;
+}
+
+.auth-google-hint strong {
+  color: #cbd5e1;
+}
+
+.btn-submit-auth:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .auth-footer-note {
@@ -1710,6 +1705,9 @@ input:focus, select:focus {
   let currentPlatform = 'dropshipping';
   let pricingMode = 'markup';
   let currentUser = null;
+  const SUPABASE_URL = ${JSON.stringify(supabaseUrl)};
+  const SUPABASE_KEY = ${JSON.stringify(supabaseKey)};
+  const SITE_URL = ${JSON.stringify(siteUrl)};
   let savedProducts = [];
   let sellerDiscountType = 'currency';
 
@@ -1718,14 +1716,11 @@ input:focus, select:focus {
   const screenSystem = document.getElementById('screenSystem');
 
   // Auth Gateway elements
-  const btnTabEmailLogin = document.getElementById('btnTabEmailLogin');
-  const btnTabTokenLogin = document.getElementById('btnTabTokenLogin');
   const formEmailAuth = document.getElementById('formEmailAuth');
-  const formTokenAuth = document.getElementById('formTokenAuth');
+  const btnSubmitGateway = document.getElementById('btnSubmitGateway');
+  const btnOpenSignup = document.getElementById('btnOpenSignup');
   const inpGatewayEmail = document.getElementById('inpGatewayEmail');
   const inpGatewayPassword = document.getElementById('inpGatewayPassword');
-  const inpGatewayToken = document.getElementById('inpGatewayToken');
-  const btnQuickDemoLogin = document.getElementById('btnQuickDemoLogin');
   const authErrorBanner = document.getElementById('authErrorBanner');
 
   // System elements
@@ -1835,6 +1830,13 @@ input:focus, select:focus {
   }
 
   function handleLogout() {
+    const token = currentUser && currentUser.session && currentUser.session.access_token;
+    if (token) {
+      fetch(SUPABASE_URL + '/auth/v1/logout', {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + token }
+      }).catch(function() {});
+    }
     currentUser = null;
     saveState();
     updateScreens();
@@ -2113,10 +2115,6 @@ input:focus, select:focus {
   }
 
   function loadState() {
-    if (window.__GERENCIIE_PRELOADED_USER__) {
-      currentUser = window.__GERENCIIE_PRELOADED_USER__;
-    }
-
     try {
       if (window.chrome && chrome.storage && chrome.storage.local) {
         chrome.storage.local.get(['gerenciie_ext_data'], function(result) {
@@ -2138,7 +2136,7 @@ input:focus, select:focus {
 
   function applyState(s) {
     if (!s) return;
-    if (s.currentUser) currentUser = s.currentUser;
+    if (s.currentUser && s.currentUser.session) currentUser = s.currentUser;
     if (s.savedProducts) savedProducts = s.savedProducts;
     if (s.prodName) inpProdName.value = s.prodName;
     if (s.cost !== undefined) inpCost.value = s.cost;
@@ -2174,7 +2172,7 @@ input:focus, select:focus {
     }
     if (s.platform) setPlatform(s.platform, false);
 
-    updateScreens();
+    refreshSessionIfNeeded();
     renderSavedProducts();
     calculate();
   }
@@ -2216,67 +2214,125 @@ input:focus, select:focus {
     });
   });
 
-  // Gateway Events
-  btnTabEmailLogin.addEventListener('click', () => {
-    btnTabEmailLogin.classList.add('active');
-    btnTabTokenLogin.classList.remove('active');
-    formEmailAuth.classList.remove('hidden');
-    formTokenAuth.classList.add('hidden');
-  });
+  // Login real no Supabase do projeto
+  function authRequest(path, body) {
+    return fetch(SUPABASE_URL + '/auth/v1/' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify(body)
+    }).then(function(res) {
+      return res.json().catch(function() { return {}; }).then(function(data) {
+        if (!res.ok) {
+          const err = new Error(data.msg || data.error_description || data.message || 'Erro ao entrar');
+          err.code = data.error_code || data.error;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
 
-  btnTabTokenLogin.addEventListener('click', () => {
-    btnTabTokenLogin.classList.add('active');
-    btnTabEmailLogin.classList.remove('active');
-    formTokenAuth.classList.remove('hidden');
-    formEmailAuth.classList.add('hidden');
-  });
+  function loadProfile(session) {
+    return fetch(SUPABASE_URL + '/rest/v1/profiles?select=display_name,role,plan,status&id=eq.' + session.user.id, {
+      headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + session.access_token }
+    })
+      .then(function(res) { return res.ok ? res.json() : []; })
+      .then(function(rows) { return rows[0] || {}; })
+      .catch(function() { return {}; });
+  }
+
+  function applySession(session) {
+    return loadProfile(session).then(function(profile) {
+      if (profile.status === 'suspended') {
+        const err = new Error('Sua conta está suspensa. Fale com o suporte.');
+        err.code = 'suspended';
+        throw err;
+      }
+      const meta = session.user.user_metadata || {};
+      handleLoginSuccess({
+        uid: session.user.id,
+        email: session.user.email,
+        displayName: profile.display_name || meta.full_name || meta.name || session.user.email.split('@')[0],
+        role: profile.role || 'user',
+        plan: profile.plan || 'free',
+        session: {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_at: session.expires_at || Math.floor(Date.now() / 1000) + (session.expires_in || 3600)
+        }
+      });
+    });
+  }
+
+  function refreshSessionIfNeeded() {
+    if (!currentUser || !currentUser.session || !currentUser.session.refresh_token) {
+      currentUser = null;
+      updateScreens();
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (currentUser.session.expires_at && currentUser.session.expires_at - now > 120) {
+      updateScreens();
+      return;
+    }
+    authRequest('token?grant_type=refresh_token', { refresh_token: currentUser.session.refresh_token })
+      .then(applySession)
+      .catch(function(err) {
+        // Sessão expirada ou revogada volta para o login; sem internet, mantém a sessão salva
+        if (err && err.code) {
+          currentUser = null;
+          saveState();
+        }
+        updateScreens();
+      });
+  }
+
+  function authErrorMessage(err) {
+    const code = err && err.code;
+    if (code === 'invalid_credentials' || code === 'invalid_grant') {
+      return 'E-mail ou senha incorretos. Se você criou a conta com o Google, defina uma senha no site.';
+    }
+    if (code === 'email_not_confirmed') return 'Confirme seu e-mail pelo link que enviamos antes de entrar.';
+    if (code === 'over_request_rate_limit') return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+    return (err && err.message) || 'Não foi possível entrar. Verifique sua conexão.';
+  }
+
+  function showAuthError(message) {
+    if (message) {
+      authErrorBanner.innerText = message;
+      authErrorBanner.classList.remove('hidden');
+    } else {
+      authErrorBanner.classList.add('hidden');
+    }
+  }
 
   formEmailAuth.addEventListener('submit', (e) => {
     e.preventDefault();
     const email = inpGatewayEmail.value.trim();
-    if (!email) return;
+    const password = inpGatewayPassword.value;
+    if (!email || !password) return;
 
-    const userObj = {
-      uid: 'usr_' + Date.now(),
-      email: email,
-      displayName: email.split('@')[0],
-      role: email.toLowerCase().includes('admin') || email === 'betosouza3322@gmail.com' ? 'admin' : 'user',
-      plan: 'pro_annual',
-      token: 'gp_auth_' + Math.random().toString(36).substring(2, 10),
-      connectedAt: new Date().toISOString()
-    };
-    handleLoginSuccess(userObj);
+    showAuthError(null);
+    btnSubmitGateway.disabled = true;
+    const label = btnSubmitGateway.querySelector('span');
+    if (label) label.innerText = 'Entrando...';
+
+    authRequest('token?grant_type=password', { email: email, password: password })
+      .then(applySession)
+      .then(function() { inpGatewayPassword.value = ''; })
+      .catch(function(err) { showAuthError(authErrorMessage(err)); })
+      .finally(function() {
+        btnSubmitGateway.disabled = false;
+        if (label) label.innerText = 'Entrar no Sistema';
+      });
   });
 
-  btnQuickDemoLogin.addEventListener('click', () => {
-    const defaultEmail = inpGatewayEmail.value.trim() || 'g2midiasoficial@gmail.com';
-    const userObj = {
-      uid: 'usr_direct_' + Date.now(),
-      email: defaultEmail,
-      displayName: defaultEmail.split('@')[0],
-      role: 'user',
-      plan: 'pro_annual',
-      token: 'gp_quick_' + Date.now(),
-      connectedAt: new Date().toISOString()
-    };
-    handleLoginSuccess(userObj);
-  });
-
-  formTokenAuth.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const token = inpGatewayToken.value.trim();
-    if (!token) return;
-
-    const userObj = {
-      uid: 'token_' + Date.now(),
-      email: 'membro.autenticado@gerenciie.pro',
-      displayName: 'Membro Gerenciie Pro',
-      role: 'user',
-      plan: 'pro_annual',
-      token: token,
-      connectedAt: new Date().toISOString()
-    };
-    handleLoginSuccess(userObj);
+  btnOpenSignup.addEventListener('click', () => {
+    if (window.chrome && chrome.tabs && chrome.tabs.create) {
+      chrome.tabs.create({ url: SITE_URL });
+    } else {
+      window.open(SITE_URL, '_blank');
+    }
   });
 
   btnLogoutTop.addEventListener('click', handleLogout);
@@ -2526,19 +2582,14 @@ export async function downloadExtensionZip(
   zip.file('styles.css', files['styles.css']);
   zip.file('README.md', files['README.md']);
 
-  const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-    <rect width="128" height="128" rx="28" fill="#2563eb"/>
-    <circle cx="64" cy="64" r="42" fill="#1d4ed8"/>
-    <path d="M50 42 L88 64 L50 86 Z" fill="#ffffff"/>
-    <circle cx="88" cy="42" r="8" fill="#38bdf8"/>
-  </svg>`;
-  
+  // Ícones reais (PNG) com a logo, servidos pelo próprio site
   const iconsFolder = zip.folder('icons');
   if (iconsFolder) {
-    iconsFolder.file('icon.svg', iconSvg);
-    iconsFolder.file('icon16.png', iconSvg);
-    iconsFolder.file('icon48.png', iconSvg);
-    iconsFolder.file('icon128.png', iconSvg);
+    await Promise.all([16, 48, 128].map(async (size) => {
+      const res = await fetch(`/extension/icon${size}.png`);
+      if (!res.ok) throw new Error(`Ícone ${size}px não encontrado`);
+      iconsFolder.file(`icon${size}.png`, await res.arrayBuffer());
+    }));
   }
 
   const content = await zip.generateAsync({ type: 'blob' });
