@@ -60,7 +60,7 @@ function translateAuthError(err: AuthError | Error): string {
   const code = (err as AuthError).code;
   switch (code) {
     case 'invalid_credentials':
-      return 'E-mail ou senha incorretos. Verifique os dados ou crie uma conta.';
+      return 'E-mail ou senha incorretos. Se você criou a conta com o Google, use o botão "Entrar com Google".';
     case 'email_not_confirmed':
       return 'Confirme seu e-mail pelo link que enviamos antes de entrar.';
     case 'user_already_exists':
