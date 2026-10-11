@@ -1,5 +1,6 @@
 import { PricingData, CalculationResult, Platform, CampaignInput } from "../types.ts";
 import { formatCurrency } from "../utils/calculations.ts";
+import { supabase } from "../src/lib/supabase.ts";
 
 export interface AgentChatMessage {
   id: string;
@@ -231,64 +232,40 @@ ${transactions.slice(0, 10).map(t => `  • [${t.date || 'Data'}] ${t.type === '
   const userSection = userName ? `
 === 6. PERFIL DO USUÁRIO ===
 - Nome: ${userName}
-- Email: ${userEmail || 'g2midiasoficial@gmail.com'}
+- Email: ${userEmail || 'não informado'}
 ` : '';
 
   return `${productSection}\n${savedProdsSection}\n${adsSection}\n${scaleSection}\n${financeSection}\n${userSection}`;
 }
 
-/**
- * Multi-tier AI execution: Server Proxy -> Direct REST with fallback models
- */
+/** Chama o proxy do servidor enviando o token de login (a chave do Gemini fica no servidor). */
+async function callGeminiProxy(body: Record<string, any>): Promise<{ ok: boolean; status: number; data: any }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const resFetch = await fetch('/api/gemini/generate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {})
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await resFetch.json().catch(() => ({}));
+  return { ok: resFetch.ok, status: resFetch.status, data };
+}
+
 async function executeGeminiRequest(
   prompt: string, 
   systemInstruction?: string, 
   model: string = 'gemini-3.6-flash', 
   temperature: number = 0.7
 ): Promise<string | null> {
-  // 1. Try local server endpoint
   try {
-    const resFetch = await fetch('/api/gemini/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, systemInstruction, model, temperature })
-    });
-    if (resFetch.ok) {
-      const data = await resFetch.json();
-      if (data?.text) return data.text;
-    }
+    const { ok, data } = await callGeminiProxy({ prompt, systemInstruction, model, temperature });
+    if (ok && data?.text) return data.text;
+    if (data?.error) console.warn('Gemini proxy:', data.error);
   } catch (e) {
-    // Proceed to direct REST fallback
+    console.warn('Gemini proxy indisponível:', e);
   }
-
-  // 2. Direct REST fallback using inlined API key
-  const key = (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.API_KEY)) || '';
-  if (key) {
-    const models = [model, 'gemini-3.6-flash', 'gemini-3.7-flash'];
-    for (const m of models) {
-      try {
-        const payload: any = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature }
-        };
-        if (systemInstruction) {
-          payload.systemInstruction = { parts: [{ text: systemInstruction }] };
-        }
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const d = await resp.json();
-        if (resp.ok && d?.candidates?.[0]?.content?.parts?.[0]?.text) {
-          return d.candidates[0].content.parts[0].text;
-        }
-      } catch (err) {
-        // try next model
-      }
-    }
-  }
-
   return null;
 }
 
@@ -463,33 +440,28 @@ export const getAIAnalysis = async (
 export const testGeminiConnection = async (): Promise<{ success: boolean; latencyMs: number; message: string; model: string }> => {
   const start = performance.now();
   try {
-    const resFetch = await fetch('/api/gemini/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: "Responda apenas 'OK' se a conexão com o Gemini estiver funcionando perfeitamente.",
-        model: 'gemini-3.6-flash',
-        temperature: 0.1
-      })
+    const { ok, data } = await callGeminiProxy({
+      prompt: "Responda apenas 'OK' se a conexão com o Gemini estiver funcionando perfeitamente.",
+      model: 'gemini-3.6-flash',
+      temperature: 0.1
     });
-
     const latencyMs = Math.round(performance.now() - start);
-    if (resFetch.ok) {
-      const data = await resFetch.json();
+    const model = data?.model || 'gemini-3.6-flash';
+
+    if (ok && data?.text) {
       return {
         success: true,
         latencyMs,
-        message: `Gemini 3.6 Flash conectado com sucesso via backend (${data.text?.trim() || 'OK'}).`,
-        model: "gemini-3.6-flash"
-      };
-    } else {
-      return {
-        success: false,
-        latencyMs,
-        message: "Servidor Gemini indisponível ou chave não configurada.",
-        model: "gemini-3.6-flash"
+        message: `Gemini (${model}) conectado com sucesso via backend (${data.text.trim()}).`,
+        model
       };
     }
+    return {
+      success: false,
+      latencyMs,
+      message: data?.error || "Servidor Gemini indisponível ou chave não configurada.",
+      model
+    };
   } catch (err: any) {
     const latencyMs = Math.round(performance.now() - start);
     return {
