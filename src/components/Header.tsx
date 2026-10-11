@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LogIn, LogOut, User, ShoppingBag, ChevronDown, Shield } from 'lucide-react';
+import { LogIn, LogOut, User, ShoppingBag, ChevronDown, Shield, Puzzle, Sparkles } from 'lucide-react';
 import { Platform, CurrencyCode } from '../../types';
 
 interface HeaderProps {
@@ -16,6 +16,8 @@ interface HeaderProps {
   onOpenLanding?: () => void;
   onOpenAdmin?: () => void;
   onLogout?: () => void;
+  onOpenExtensionModal?: () => void;
+  onToggleFloatingWidget?: () => void;
 }
 
 export function Header({
@@ -31,7 +33,9 @@ export function Header({
   onNavigateProfile,
   onOpenLanding,
   onOpenAdmin,
-  onLogout
+  onLogout,
+  onOpenExtensionModal,
+  onToggleFloatingWidget
 }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -87,6 +91,19 @@ export function Header({
 
       {/* Right Controls: Margem Líquida Badge, Currency & Avatar */}
       <div className="flex items-center gap-3">
+        {/* Browser Extension Button */}
+        {onOpenExtensionModal && (
+          <button
+            onClick={onOpenExtensionModal}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-blue-950 text-blue-300 hover:text-white border border-slate-800 hover:border-blue-500/40 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+            title="Extensão para Navegador (Chrome & Edge)"
+          >
+            <Puzzle size={14} className="text-cyan-400" />
+            <span>Extensão Chrome</span>
+            <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded font-black">NOVO</span>
+          </button>
+        )}
+
         {/* Currency Switcher */}
         {setCurrency && (
           <select

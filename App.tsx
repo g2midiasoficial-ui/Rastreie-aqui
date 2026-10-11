@@ -38,10 +38,14 @@ import { FinanceMarket } from './src/components/FinanceMarket.tsx';
 import { FinanceVehicles } from './src/components/FinanceVehicles.tsx';
 import { FinanceProfile } from './src/components/FinanceProfile.tsx';
 import { AuthModal } from './src/components/AuthModal.tsx';
+import { BrowserExtensionModal } from './src/components/BrowserExtensionModal.tsx';
+import { FloatingExtensionWidget } from './src/components/FloatingExtensionWidget.tsx';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'app' | 'landing' | 'admin'>('landing');
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState<boolean>(false);
+  const [isFloatingExtensionOpen, setIsFloatingExtensionOpen] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
@@ -321,6 +325,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
+        onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -343,6 +348,8 @@ export default function App() {
           onOpenLanding={() => setCurrentView('landing')}
           onOpenAdmin={() => setCurrentView('admin')}
           onLogout={handleLogout}
+          onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
+          onToggleFloatingWidget={() => setIsFloatingExtensionOpen(prev => !prev)}
         />
 
         {/* Scrollable Viewport */}
@@ -354,6 +361,9 @@ export default function App() {
               setPricingData={setPricingData}
               platform={platform}
               currentResult={calculationResult}
+              currentUser={currentUser}
+              onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
+              onToggleFloatingWidget={() => setIsFloatingExtensionOpen(prev => !prev)}
             />
           )}
 
@@ -804,6 +814,33 @@ export default function App() {
           setIsAuthModalOpen(false);
         }}
         initialMode={authModalMode}
+      />
+
+      {/* Browser Extension Modal Hub & Download */}
+      <BrowserExtensionModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+        pricingData={pricingData}
+        currentUser={currentUser}
+        onToggleFloatingWidget={() => setIsFloatingExtensionOpen(prev => !prev)}
+        onOpenAuthModal={() => {
+          setAuthModalMode('login');
+          setIsAuthModalOpen(true);
+        }}
+      />
+
+      {/* Floating Mini Browser Extension Widget */}
+      <FloatingExtensionWidget
+        isOpen={isFloatingExtensionOpen}
+        onClose={() => setIsFloatingExtensionOpen(false)}
+        pricingData={pricingData}
+        setPricingData={setPricingData}
+        currentUser={currentUser}
+        onOpenFullModal={() => setIsExtensionModalOpen(true)}
+        onOpenAuthModal={() => {
+          setAuthModalMode('login');
+          setIsAuthModalOpen(true);
+        }}
       />
     </div>
   );

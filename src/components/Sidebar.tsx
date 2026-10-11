@@ -22,7 +22,9 @@ import {
   Car, 
   User,
   Globe,
-  Shield
+  Shield,
+  Puzzle,
+  Download
 } from 'lucide-react';
 
 export type AppTab = 
@@ -54,12 +56,14 @@ interface SidebarProps {
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
   currentUser?: any;
+  onOpenExtensionModal?: () => void;
 }
 
 export function Sidebar({
   activeTab,
   setActiveTab,
-  currentUser
+  currentUser,
+  onOpenExtensionModal
 }: SidebarProps) {
   const ecomMenuItems: { id: AppTab; label: string; icon: any }[] = [
     { id: 'overview', label: 'Calculadora de Preço', icon: Calculator },
@@ -161,7 +165,32 @@ export function Sidebar({
           })}
         </div>
 
-        {/* Section 3: Administração Master */}
+        {/* Section 3: Extensão para Navegador */}
+        {onOpenExtensionModal && (
+          <div className="pt-2 border-t border-slate-100">
+            <div 
+              onClick={onOpenExtensionModal}
+              className="p-3.5 bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-2xl border border-blue-500/20 shadow-sm cursor-pointer hover:border-blue-500/40 transition-all group"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[9px] font-black uppercase text-blue-400 tracking-wider flex items-center gap-1">
+                  <Puzzle size={12} /> Extensão Chrome
+                </span>
+                <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded uppercase">
+                  Grátis
+                </span>
+              </div>
+              <p className="text-xs font-black text-white group-hover:text-blue-300 transition-colors">
+                Calculadora no Navegador
+              </p>
+              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                Precifique no AliExpress & Shopee
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Section 4: Administração Master */}
         {(currentUser?.email?.toLowerCase() === 'betosouza3322@gmail.com' || 
           currentUser?.role === 'admin') && (
           <div className="space-y-1 pt-2 border-t border-slate-100">

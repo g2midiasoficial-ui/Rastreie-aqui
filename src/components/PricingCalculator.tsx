@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  Package, Megaphone, DollarSign, Target, BarChart3, Truck, Sparkles
+  Package, Megaphone, DollarSign, Target, BarChart3, Truck, Sparkles, Puzzle, Download, Copy, Check, ExternalLink
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -8,6 +8,7 @@ import {
 import { Platform, PricingData, CalculationResult } from '../../types.ts';
 import { calculatePricing, formatCurrency, getCurrencySymbol } from '../../utils/calculations.ts';
 import { ModernInput, Section, StatusCard } from './UIComponents.tsx';
+import { downloadExtensionZip } from '../utils/extensionPackageGenerator.ts';
 
 const MARKUP_STEPS = [1.2, 1.5, 1.8, 2.0, 2.2, 2.5, 2.8, 3.0, 3.5, 4.0, 5.0];
 
@@ -16,24 +17,111 @@ interface PricingCalculatorProps {
   setPricingData: React.Dispatch<React.SetStateAction<PricingData>>;
   currentResult: CalculationResult;
   platform: Platform;
+  currentUser?: any;
+  onOpenExtensionModal?: () => void;
+  onToggleFloatingWidget?: () => void;
 }
 
 export function PricingCalculator({
   pricingData,
   setPricingData,
   currentResult,
-  platform
+  platform,
+  currentUser,
+  onOpenExtensionModal,
+  onToggleFloatingWidget
 }: PricingCalculatorProps) {
   const currentSymbol = getCurrencySymbol(pricingData.currency);
+  const [copiedPrice, setCopiedPrice] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  const handleCopyCurrentPrice = () => {
+    navigator.clipboard.writeText(formatCurrency(currentResult.finalPrice, pricingData.currency));
+    setCopiedPrice(true);
+    setTimeout(() => setCopiedPrice(false), 2000);
+  };
+
+  const handleQuickZipDownload = async () => {
+    try {
+      setIsDownloadingZip(true);
+      await downloadExtensionZip(pricingData, currentUser);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-20">
+      {/* Browser Extension Feature Banner */}
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 border border-blue-500/30 rounded-[32px] p-6 md:p-8 shadow-xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="space-y-2 max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+              <Puzzle size={12} className="text-cyan-400" /> Extensão para Navegador
+            </span>
+            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+              Chrome, Edge & Brave
+            </span>
+          </div>
+          <h2 className="text-xl md:text-2xl font-black text-white tracking-tight">
+            Use a Calculadora Gerenciie Pro direto nos sites de fornecedores
+          </h2>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Precifique produtos no AliExpress, Shopee, Mercado Livre e Shein sem sair da aba. Calcule margem líquida, markup, taxas e CPA Breakeven com o atalho <span className="text-cyan-300 font-mono font-bold bg-black/40 px-1.5 py-0.5 rounded">Ctrl+Shift+P</span>.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto shrink-0">
+          {onOpenExtensionModal && (
+            <button
+              onClick={onOpenExtensionModal}
+              className="flex-1 md:flex-none py-3 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+            >
+              <Puzzle size={16} />
+              <span>Ver Extensão & Tutorial</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleQuickZipDownload}
+            disabled={isDownloadingZip}
+            className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="Baixar pacote .ZIP pronto para instalar"
+          >
+            <Download size={15} />
+            <span>{isDownloadingZip ? 'Baixando...' : 'Baixar .ZIP'}</span>
+          </button>
+
+          {onToggleFloatingWidget && (
+            <button
+              onClick={onToggleFloatingWidget}
+              className="py-3 px-4 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              title="Abrir simulador flutuante na tela"
+            >
+              <Sparkles size={15} />
+              <span>Widget Flutuante</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Top Metric Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="md:col-span-2 blue-gradient rounded-[32px] p-8 text-white shadow-xl relative overflow-hidden">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">
-            {pricingData.pricingMode === 'manual' ? 'Preço de Venda Definido' : 'Preço Sugerido (Venda)'}
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
+              {pricingData.pricingMode === 'manual' ? 'Preço de Venda Definido' : 'Preço Sugerido (Venda)'}
+            </p>
+            <button
+              onClick={handleCopyCurrentPrice}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-black border border-white/20 flex items-center gap-1 transition-all cursor-pointer"
+            >
+              {copiedPrice ? <Check size={12} className="text-emerald-300" /> : <Copy size={12} />}
+              <span>{copiedPrice ? 'Copiado!' : 'Copiar'}</span>
+            </button>
+          </div>
           <h3 className="text-5xl font-black tracking-tighter">
             {formatCurrency(currentResult.finalPrice, pricingData.currency)}
           </h3>
