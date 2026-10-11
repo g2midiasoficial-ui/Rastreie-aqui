@@ -239,9 +239,7 @@ export function SalesLandingPage({
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-slate-950/80 border-b border-white/5">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <a href="#topo" className="flex items-center gap-2.5 shrink-0">
-            <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-xl flex items-center justify-center font-extrabold text-white text-lg shadow-lg shadow-blue-500/25">
-              G
-            </div>
+            <img src="/logo-192.png" alt="" className="w-9 h-9 rounded-xl shadow-lg shadow-blue-500/25" />
             <span className="font-extrabold text-lg tracking-tight text-white">Gerenciie</span>
             <span className="hidden sm:inline text-[10px] font-bold tracking-wider uppercase bg-blue-500/15 text-blue-300 border border-blue-500/25 px-1.5 py-0.5 rounded-md">
               Pro
@@ -757,7 +755,7 @@ export function SalesLandingPage({
       <footer className="border-t border-white/5">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-5 text-sm text-slate-500">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-extrabold text-xs">G</div>
+            <img src="/logo-192.png" alt="" className="w-7 h-7 rounded-lg" />
             <span className="font-semibold text-slate-400">Gerenciie Pro © {new Date().getFullYear()}</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6">
