@@ -5,15 +5,13 @@ import {
   ChevronDown, ChevronUp, Star, Award, Layers, Zap, Check,
   ExternalLink, Globe, HelpCircle, ArrowUpRight, Play, Eye, AlertCircle
 } from 'lucide-react';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile
-} from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase.ts';
+import {
+  AuthMessageError,
+  authenticateWithEmail,
+  createGuestUser,
+  saveUserSession,
+  signInWithGoogle
+} from '../lib/auth.ts';
 
 interface SalesLandingPageProps {
   onEnterPlatform: () => void;
@@ -53,58 +51,14 @@ export function SalesLandingPage({
     setAuthError(null);
   };
 
-  const generateSafeUid = (emailStr: string) => {
-    let hash = 0;
-    for (let i = 0; i < emailStr.length; i++) {
-      hash = ((hash << 5) - hash) + emailStr.charCodeAt(i);
-      hash |= 0;
-    }
-    const clean = emailStr.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
-    return `usr_${Math.abs(hash).toString(36)}_${clean || 'member'}`;
-  };
-
-  const saveUserSession = (userObj: any) => {
-    try {
-      localStorage.setItem('gerenciie_user_session', JSON.stringify(userObj));
-    } catch (e) {
-      console.warn('Local storage write error:', e);
-    }
-  };
-
   const handleGoogleLogin = async () => {
     setLoading(true);
     setAuthError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      
-      const userPayload = {
-        uid: result.user.uid,
-        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Conectado',
-        email: result.user.email || '',
-        photoURL: result.user.photoURL,
-        provider: 'google'
-      };
-      
-      saveUserSession(userPayload);
-      onLoginSuccess(userPayload);
-      setAuthSuccess('Autenticado com sucesso via Google! Entrando...');
-      setTimeout(() => {
-        onEnterPlatform();
-      }, 500);
+      // Redireciona para o Google; ao voltar, o App abre a plataforma
+      await signInWithGoogle();
     } catch (err: any) {
-      console.error('Google Auth Error:', err);
-      const isAbortOrClosed = 
-        err?.code === 'auth/popup-closed-by-user' || 
-        err?.code === 'auth/cancelled-popup-request';
-
-      if (isAbortOrClosed) {
-        setAuthError('O login com o Google foi cancelado pela janela pop-up.');
-      } else {
-        setAuthError('Não foi possível autenticar com o Google. Por favor, entre com e-mail e senha.');
-      }
-    } finally {
+      setAuthError(err?.message || 'Não foi possível autenticar com o Google. Por favor, entre com e-mail e senha.');
       setLoading(false);
     }
   };
@@ -115,212 +69,34 @@ export function SalesLandingPage({
     setAuthError(null);
     setAuthSuccess(null);
 
-    const cleanEmail = authEmail.trim();
-    const cleanPassword = authPassword.trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      setAuthError('Por favor, preencha o e-mail e a senha.');
-      setLoading(false);
-      return;
-    }
-
-    if (cleanPassword.length < 6) {
-      setAuthError('A senha deve ter no mínimo 6 caracteres.');
-      setLoading(false);
-      return;
-    }
-
-    const isMasterAdmin = cleanEmail.toLowerCase() === 'betosouza3322@gmail.com';
-
-    // Admin Master direct access
-    if (isMasterAdmin) {
-      if (cleanPassword === 'Beto54321@') {
-        const adminPayload = {
-          uid: 'admin_betosouza',
-          displayName: 'Beto Souza (Admin Master)',
-          email: 'Betosouza3322@gmail.com',
-          photoURL: 'https://api.dicebear.com/7.x/initials/svg?seed=Beto%20Souza&backgroundColor=f59e0b,d97706',
-          role: 'admin',
-          plan: 'lifetime',
-          provider: 'password'
-        };
-        try {
-          await setDoc(doc(db, 'users', 'admin_betosouza'), {
-            uid: 'admin_betosouza',
-            email: 'Betosouza3322@gmail.com',
-            displayName: 'Beto Souza (Admin Master)',
-            role: 'admin',
-            plan: 'lifetime',
-            provider: 'password',
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (err) {
-          console.warn('Firestore admin note:', err);
-        }
-        saveUserSession(adminPayload);
-        onLoginSuccess(adminPayload);
-        setAuthSuccess('Acesso de Administrador Master liberado!');
-        setTimeout(() => {
-          onEnterPlatform();
-        }, 400);
-        setLoading(false);
-        return;
-      } else {
-        setAuthError('Senha de administrador incorreta.');
-        setLoading(false);
-        return;
-      }
-    }
-
     try {
-      if (authMode === 'register') {
-        let userRecord: any = null;
-        try {
-          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-          if (authName.trim() && userRecord) {
-            try {
-              await updateProfile(userRecord, { displayName: authName.trim() });
-            } catch (profileErr) {
-              console.warn(profileErr);
-            }
-          }
-        } catch (authErr: any) {
-          console.warn('Firebase Auth fallback for register:', authErr?.message || authErr);
-          const simulatedUid = generateSafeUid(cleanEmail);
-          userRecord = {
-            uid: simulatedUid,
-            email: cleanEmail,
-            displayName: authName.trim() || cleanEmail.split('@')[0]
-          };
-        }
-
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: authName.trim() || userRecord.displayName || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provider: 'password',
-          role: 'user',
-          plan: 'pro_annual'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: userPayload.displayName,
-            provider: 'password',
-            role: 'user',
-            plan: 'pro_annual',
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Firestore save notice:', e);
-        }
-
-        saveUserSession(userPayload);
-        onLoginSuccess(userPayload);
-        setAuthSuccess('Conta criada com sucesso! Acessando seu painel...');
-        setTimeout(() => {
-          onEnterPlatform();
-        }, 400);
-      } else {
-        let userRecord: any = null;
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-        } catch (authErr: any) {
-          if (authErr?.code === 'auth/wrong-password' || authErr?.code === 'auth/invalid-credential') {
-            throw authErr;
-          }
-          console.warn('Firebase Auth fallback for login:', authErr?.message || authErr);
-          const simulatedUid = generateSafeUid(cleanEmail);
-          userRecord = {
-            uid: simulatedUid,
-            email: cleanEmail,
-            displayName: cleanEmail.split('@')[0]
-          };
-        }
-
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: userRecord.displayName || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          photoURL: userRecord.photoURL,
-          provider: 'password',
-          role: 'user',
-          plan: 'pro_annual'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: userPayload.displayName,
-            role: 'user',
-            plan: 'pro_annual',
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Firestore sync note:', e);
-        }
-
-        saveUserSession(userPayload);
-        onLoginSuccess(userPayload);
-        setAuthSuccess(`Acessando o painel...`);
-        setTimeout(() => {
-          onEnterPlatform();
-        }, 400);
+      const result = await authenticateWithEmail(authMode, authEmail, authPassword, authName);
+      if (result.status === 'confirm_email') {
+        setAuthSuccess('Conta criada! Enviamos um link de confirmação para o seu e-mail. Confirme e depois faça login.');
+        setAuthMode('login');
+        setAuthPassword('');
+        return;
       }
+      saveUserSession(result.user);
+      setAuthSuccess(authMode === 'register' ? 'Conta criada com sucesso! Acessando seu painel...' : 'Acessando o painel...');
+      // onLoginSuccess já abre a plataforma (onEnterPlatform ainda veria o usuário antigo)
+      setTimeout(() => {
+        onLoginSuccess(result.user);
+      }, 400);
     } catch (err: any) {
       console.error('Email Auth Error:', err);
-      if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
-        const simulatedUid = generateSafeUid(cleanEmail);
-        const userPayload = {
-          uid: simulatedUid,
-          displayName: authName.trim() || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provider: 'password',
-          role: 'user',
-          plan: 'pro_annual'
-        };
-        saveUserSession(userPayload);
-        onLoginSuccess(userPayload);
-        onEnterPlatform();
-        return;
-      }
-      let message = 'E-mail ou senha incorretos.';
-      if (err.code === 'auth/email-already-in-use') {
-        message = 'Este e-mail já está cadastrado. Alterne para o modo de Login.';
-      } else if (err.code === 'auth/invalid-email') {
-        message = 'Formato de e-mail inválido.';
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        message = 'E-mail ou senha incorretos. Verifique suas credenciais.';
-      } else if (err.code === 'auth/weak-password') {
-        message = 'A senha informada é muito fraca.';
-      } else if (err.message) {
-        message = err.message.replace(/Firebase: Error \((.*?)\)\.?/gi, '$1');
-      }
-      setAuthError(message);
+      setAuthError(err instanceof AuthMessageError ? err.message : 'Ocorreu um erro ao entrar.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleQuickLogin = (name: string, email: string) => {
-    const mockUser = {
-      uid: 'user_' + Math.random().toString(36).substring(2, 9),
-      displayName: name,
-      email: email,
-      isGuest: true,
-      provider: 'quick_access'
-    };
-    saveUserSession(mockUser);
-    onLoginSuccess(mockUser);
+    const guestUser = createGuestUser(name, email);
+    saveUserSession(guestUser);
     setAuthSuccess(`Acesso rápido liberado como ${name}!`);
     setTimeout(() => {
-      onEnterPlatform();
+      onLoginSuccess(guestUser);
     }, 400);
   };
 
@@ -471,7 +247,7 @@ export function SalesLandingPage({
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={16} className="text-emerald-400" />
-                <span>Nuvem Firestore em Tempo Real</span>
+                <span>Nuvem Supabase em Tempo Real</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={16} className="text-emerald-400" />
@@ -597,7 +373,7 @@ export function SalesLandingPage({
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-emerald-400" />
-                    <span>Sincronização em Nuvem Firestore</span>
+                    <span>Sincronização em Nuvem Supabase</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-emerald-400" />

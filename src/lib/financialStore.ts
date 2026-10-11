@@ -10,18 +10,34 @@ import {
   VehicleExpense,
   FinancialMode 
 } from '../types/finance';
-import { db } from './firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  addDoc, 
-  serverTimestamp 
-} from 'firebase/firestore';
+import { supabase } from './supabase';
+
+// Campos que existem só na interface e não viram colunas no banco
+const CLIENT_ONLY_FIELDS = new Set(['userId', 'createdAt']);
+
+const toSnake = (key: string) => key.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+const toCamel = (key: string) => key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+
+/** Objeto do app (camelCase) -> linha do Supabase (snake_case). */
+function toRow(obj: Record<string, any>): Record<string, any> {
+  const row: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (CLIENT_ONLY_FIELDS.has(key) || value === undefined) continue;
+    // IDs vazios (ex.: transação sem conta) viram NULL para não quebrar a chave estrangeira
+    row[toSnake(key)] = key.endsWith('Id') && value === '' ? null : value;
+  }
+  return row;
+}
+
+/** Linha do Supabase (snake_case) -> objeto do app (camelCase). */
+function fromRow(row: Record<string, any>): Record<string, any> {
+  const obj: Record<string, any> = {};
+  for (const [key, value] of Object.entries(row)) {
+    obj[toCamel(key)] = value === null ? undefined : value;
+  }
+  if (obj.accountId === undefined && 'account_id' in row) obj.accountId = '';
+  return obj;
+}
 
 const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat-1', name: 'Salário & Renda', type: 'income', icon: 'DollarSign', color: '#10B981', mode: 'personal' },
@@ -113,128 +129,104 @@ export function useFinancialData(currentUser: any, mode: FinancialMode = 'person
     localStorage.setItem(`gerenciie_veh_exp_${mode}`, JSON.stringify(vehicleExpenses));
   }, [vehicleExpenses, mode]);
 
-  // Firestore sync when currentUser is logged in
+  // Usuário com conta real (visitantes ficam só no localStorage)
+  const userId: string | null = currentUser?.uid && !currentUser?.isGuest ? currentUser.uid : null;
+
+  // Supabase sync when currentUser is logged in: o banco é a fonte da verdade
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!userId) return;
+    let cancelled = false;
 
-    try {
-      const qAccounts = query(
-        collection(db, 'accounts'),
-        where('userId', '==', currentUser.uid)
-      );
-      const unsubAccounts = onSnapshot(qAccounts, (snapshot) => {
-        const loaded: Account[] = [];
-        snapshot.forEach((doc) => loaded.push({ id: doc.id, ...(doc.data() as any) }));
-        if (loaded.length > 0) {
-          setAccounts(loaded.filter(a => a.mode === mode));
-        }
-      }, (err) => console.warn('Firestore accounts sync:', err));
+    const load = async <T,>(table: string, setter: (rows: T[]) => void, filterByMode = true) => {
+      let q = supabase.from(table).select('*').order('created_at', { ascending: true });
+      if (filterByMode) q = q.eq('mode', mode);
+      const { data, error } = await q;
+      if (error) {
+        console.warn(`Supabase ${table} sync:`, error.message);
+        return;
+      }
+      if (!cancelled) setter((data || []).map(fromRow) as T[]);
+    };
 
-      const qTxs = query(
-        collection(db, 'transactions'),
-        where('userId', '==', currentUser.uid)
-      );
-      const unsubTxs = onSnapshot(qTxs, (snapshot) => {
-        const loaded: Transaction[] = [];
-        snapshot.forEach((doc) => loaded.push({ id: doc.id, ...(doc.data() as any) }));
-        if (loaded.length > 0) {
-          setTransactions(loaded.filter(t => t.mode === mode));
-        }
-      }, (err) => console.warn('Firestore transactions sync:', err));
+    load<Account>('accounts', setAccounts);
+    load<Transaction>('transactions', rows => setTransactions([...rows].reverse()));
+    load<Category>('categories', rows => setCategories([
+      ...DEFAULT_CATEGORIES.filter(c => c.mode === mode || c.mode === 'personal'),
+      ...rows
+    ]));
+    load<Debt>('debts', setDebts);
+    load<Goal>('goals', setGoals);
+    load<MarketItem>('market_items', setMarketItems);
+    load<Vehicle>('vehicles', setVehicles);
+    load<VehicleExpense>('vehicle_expenses', setVehicleExpenses, false);
 
-      return () => {
-        unsubAccounts();
-        unsubTxs();
-      };
-    } catch (e) {
-      console.warn('Firestore subscription error:', e);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, mode]);
+
+  // Grava no Supabase (somente para usuários logados); falhas não travam a interface
+  const persist = useCallback(async (table: string, op: 'insert' | 'update' | 'delete', id: string, values?: Record<string, any>) => {
+    if (!userId) return;
+    let result;
+    if (op === 'insert') {
+      result = await supabase.from(table).insert(toRow({ ...values, id }));
+    } else if (op === 'update') {
+      result = await supabase.from(table).update(toRow(values || {})).eq('id', id);
+    } else {
+      result = await supabase.from(table).delete().eq('id', id);
     }
-  }, [currentUser?.uid, mode]);
+    if (result.error) console.warn(`Supabase ${op} ${table}:`, result.error.message);
+  }, [userId]);
+
+  const adjustAccountBalance = useCallback((accountId: string, delta: number) => {
+    const acc = accounts.find(a => a.id === accountId);
+    if (!acc || delta === 0) return;
+    const balance = acc.balance + delta;
+    setAccounts(prev => prev.map(a => a.id === accountId ? { ...a, balance } : a));
+    persist('accounts', 'update', accountId, { balance });
+  }, [accounts, persist]);
 
   // Account operations
   const addAccount = useCallback(async (account: Omit<Account, 'id'>) => {
-    const id = `acc_${Date.now()}`;
-    const newAcc: Account = { ...account, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newAcc: Account = { ...account, id, mode };
     setAccounts(prev => [...prev, newAcc]);
-
-    if (currentUser?.uid) {
-      try {
-        await setDoc(doc(db, 'accounts', id), {
-          ...newAcc,
-          createdAt: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn('Firestore addAccount error:', err);
-      }
-    }
+    await persist('accounts', 'insert', id, newAcc);
     return newAcc;
-  }, [currentUser, mode]);
+  }, [mode, persist]);
 
   const deleteAccount = useCallback(async (id: string) => {
     setAccounts(prev => prev.filter(a => a.id !== id));
-    if (currentUser?.uid) {
-      try {
-        await deleteDoc(doc(db, 'accounts', id));
-      } catch (e) {
-        console.warn('Firestore deleteAccount error:', e);
-      }
-    }
-  }, [currentUser]);
+    await persist('accounts', 'delete', id);
+  }, [persist]);
 
   // Transaction operations
   const addTransaction = useCallback(async (tx: Omit<Transaction, 'id'>) => {
-    const id = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const newTx: Transaction = { ...tx, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newTx: Transaction = { ...tx, id, mode };
     
     setTransactions(prev => [newTx, ...prev]);
 
     // Update account balance if accountId is provided and status is 'paid'
     if (tx.accountId && tx.status === 'paid') {
-      setAccounts(prev => prev.map(acc => {
-        if (acc.id === tx.accountId) {
-          const delta = tx.type === 'income' ? tx.amount : -tx.amount;
-          return { ...acc, balance: acc.balance + delta };
-        }
-        return acc;
-      }));
+      adjustAccountBalance(tx.accountId, tx.type === 'income' ? tx.amount : -tx.amount);
     }
 
-    if (currentUser?.uid) {
-      try {
-        await setDoc(doc(db, 'transactions', id), {
-          ...newTx,
-          createdAt: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn('Firestore addTransaction error:', err);
-      }
-    }
+    await persist('transactions', 'insert', id, newTx);
     return newTx;
-  }, [currentUser, mode]);
+  }, [mode, persist, adjustAccountBalance]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     const target = transactions.find(t => t.id === id);
     if (target && target.accountId && target.status === 'paid') {
       // Revert balance
-      setAccounts(prev => prev.map(acc => {
-        if (acc.id === target.accountId) {
-          const delta = target.type === 'income' ? -target.amount : target.amount;
-          return { ...acc, balance: acc.balance + delta };
-        }
-        return acc;
-      }));
+      adjustAccountBalance(target.accountId, target.type === 'income' ? -target.amount : target.amount);
     }
 
     setTransactions(prev => prev.filter(t => t.id !== id));
-
-    if (currentUser?.uid) {
-      try {
-        await deleteDoc(doc(db, 'transactions', id));
-      } catch (e) {
-        console.warn('Firestore deleteTransaction error:', e);
-      }
-    }
-  }, [transactions, currentUser]);
+    await persist('transactions', 'delete', id);
+  }, [transactions, persist, adjustAccountBalance]);
 
   const updateTransactionStatus = useCallback(async (id: string, newStatus: 'paid' | 'pending') => {
     const tx = transactions.find(t => t.id === id);
@@ -242,100 +234,89 @@ export function useFinancialData(currentUser: any, mode: FinancialMode = 'person
 
     // Apply balance impact
     if (tx.accountId) {
-      setAccounts(prev => prev.map(acc => {
-        if (acc.id === tx.accountId) {
-          if (newStatus === 'paid' && tx.status === 'pending') {
-            const delta = tx.type === 'income' ? tx.amount : -tx.amount;
-            return { ...acc, balance: acc.balance + delta };
-          } else if (newStatus === 'pending' && tx.status === 'paid') {
-            const delta = tx.type === 'income' ? -tx.amount : tx.amount;
-            return { ...acc, balance: acc.balance + delta };
-          }
-          return acc;
-        }
-        return acc;
-      }));
+      if (newStatus === 'paid' && tx.status === 'pending') {
+        adjustAccountBalance(tx.accountId, tx.type === 'income' ? tx.amount : -tx.amount);
+      } else if (newStatus === 'pending' && tx.status === 'paid') {
+        adjustAccountBalance(tx.accountId, tx.type === 'income' ? -tx.amount : tx.amount);
+      }
     }
 
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-
-    if (currentUser?.uid) {
-      try {
-        await setDoc(doc(db, 'transactions', id), { status: newStatus }, { merge: true });
-      } catch (e) {
-        console.warn('Firestore update status error:', e);
-      }
-    }
-  }, [transactions, currentUser]);
+    await persist('transactions', 'update', id, { status: newStatus });
+  }, [transactions, persist, adjustAccountBalance]);
 
   // Debt operations
   const addDebt = useCallback(async (debt: Omit<Debt, 'id'>) => {
-    const id = `debt_${Date.now()}`;
-    const newDebt: Debt = { ...debt, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newDebt: Debt = { ...debt, id, mode };
     setDebts(prev => [...prev, newDebt]);
+    await persist('debts', 'insert', id, newDebt);
     return newDebt;
-  }, [currentUser, mode]);
+  }, [mode, persist]);
 
   const recordDebtPayment = useCallback((debtId: string, amount: number) => {
-    setDebts(prev => prev.map(d => {
-      if (d.id === debtId) {
-        const newPaid = Math.min(d.totalAmount, d.paidAmount + amount);
-        const newPaidInstallments = Math.min(d.installmentsCount, d.paidInstallments + 1);
-        const status = newPaid >= d.totalAmount ? 'paid_off' : 'active';
-        return {
-          ...d,
-          paidAmount: newPaid,
-          paidInstallments: newPaidInstallments,
-          status
-        };
-      }
-      return d;
-    }));
-  }, []);
+    const d = debts.find(item => item.id === debtId);
+    if (!d) return;
+    const newPaid = Math.min(d.totalAmount, d.paidAmount + amount);
+    const changes = {
+      paidAmount: newPaid,
+      paidInstallments: Math.min(d.installmentsCount, d.paidInstallments + 1),
+      status: (newPaid >= d.totalAmount ? 'paid_off' : 'active') as Debt['status']
+    };
+    setDebts(prev => prev.map(item => item.id === debtId ? { ...item, ...changes } : item));
+    persist('debts', 'update', debtId, changes);
+  }, [debts, persist]);
 
   // Goal operations
   const addGoal = useCallback(async (goal: Omit<Goal, 'id'>) => {
-    const id = `goal_${Date.now()}`;
-    const newGoal: Goal = { ...goal, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newGoal: Goal = { ...goal, id, mode };
     setGoals(prev => [...prev, newGoal]);
+    await persist('goals', 'insert', id, newGoal);
     return newGoal;
-  }, [currentUser, mode]);
+  }, [mode, persist]);
 
   const depositGoal = useCallback((goalId: string, amount: number) => {
-    setGoals(prev => prev.map(g => {
-      if (g.id === goalId) {
-        return { ...g, currentAmount: g.currentAmount + amount };
-      }
-      return g;
-    }));
-  }, []);
+    const g = goals.find(item => item.id === goalId);
+    if (!g) return;
+    const currentAmount = g.currentAmount + amount;
+    setGoals(prev => prev.map(item => item.id === goalId ? { ...item, currentAmount } : item));
+    persist('goals', 'update', goalId, { currentAmount });
+  }, [goals, persist]);
 
   // Market operations
   const addMarketItem = useCallback((item: Omit<MarketItem, 'id'>) => {
-    const id = `mkt_${Date.now()}`;
-    const newItem: MarketItem = { ...item, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newItem: MarketItem = { ...item, id, mode };
     setMarketItems(prev => [...prev, newItem]);
-  }, [currentUser, mode]);
+    persist('market_items', 'insert', id, newItem);
+  }, [mode, persist]);
 
   const toggleMarketItem = useCallback((id: string) => {
-    setMarketItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
-  }, []);
+    const item = marketItems.find(i => i.id === id);
+    if (!item) return;
+    setMarketItems(prev => prev.map(i => i.id === id ? { ...i, checked: !item.checked } : i));
+    persist('market_items', 'update', id, { checked: !item.checked });
+  }, [marketItems, persist]);
 
   const deleteMarketItem = useCallback((id: string) => {
     setMarketItems(prev => prev.filter(i => i.id !== id));
-  }, []);
+    persist('market_items', 'delete', id);
+  }, [persist]);
 
   // Vehicle operations
   const addVehicle = useCallback((veh: Omit<Vehicle, 'id'>) => {
-    const id = `veh_${Date.now()}`;
-    const newVeh: Vehicle = { ...veh, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newVeh: Vehicle = { ...veh, id, mode };
     setVehicles(prev => [...prev, newVeh]);
-  }, [currentUser, mode]);
+    persist('vehicles', 'insert', id, newVeh);
+  }, [mode, persist]);
 
   const addVehicleExpense = useCallback((exp: Omit<VehicleExpense, 'id'>) => {
-    const id = `vehexp_${Date.now()}`;
-    const newExp: VehicleExpense = { ...exp, id, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newExp: VehicleExpense = { ...exp, id };
     setVehicleExpenses(prev => [...prev, newExp]);
+    persist('vehicle_expenses', 'insert', id, newExp);
     // Also create a financial transaction automatically
     addTransaction({
       description: `Veículo: ${exp.description}`,
@@ -349,14 +330,15 @@ export function useFinancialData(currentUser: any, mode: FinancialMode = 'person
       mode,
       notes: `KM: ${exp.km || '-'}, Litros: ${exp.liters || '-'}`
     });
-  }, [currentUser, mode, accounts, addTransaction]);
+  }, [mode, accounts, addTransaction, persist]);
 
   // Categories
   const addCategory = useCallback((cat: Omit<Category, 'id'>) => {
-    const id = `cat_${Date.now()}`;
-    const newCat: Category = { ...cat, id, mode, userId: currentUser?.uid };
+    const id = crypto.randomUUID();
+    const newCat: Category = { ...cat, id, mode };
     setCategories(prev => [...prev, newCat]);
-  }, [currentUser, mode]);
+    persist('categories', 'insert', id, newCat);
+  }, [mode, persist]);
 
   // Financial Metrics Computed
   const metrics = useMemo(() => {

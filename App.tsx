@@ -1,19 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Platform, PricingData, TaxRegime, CampaignInput } from './types.ts';
 import { calculatePricing, getCurrencySymbol } from './utils/calculations.ts';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  query, 
-  where, 
-  onSnapshot, 
-  deleteDoc, 
-  addDoc, 
-  serverTimestamp 
-} from 'firebase/firestore';
-import { auth, db } from './src/lib/firebase.ts';
+import { supabase } from './src/lib/supabase.ts';
+import { consumeOAuthRedirectFlag, loadAppUser, saveUserSession, signOutUser } from './src/lib/auth.ts';
 
 // Financial Suite Hooks & Types
 import { FinancialMode, Transaction, Account } from './src/types/finance.ts';
@@ -127,29 +116,29 @@ export default function App() {
 
   // Auth observer
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const userData = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || user.email?.split('@')[0] || 'Usuário',
-          photoURL: user.photoURL,
-        };
-        setCurrentUser(userData);
-        localStorage.setItem('gerenciie_user_session', JSON.stringify(userData));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        // Sai do callback antes de consultar o banco (recomendação do supabase-js)
+        setTimeout(async () => {
+          const userData = await loadAppUser(session.user);
+          setCurrentUser(userData);
+          saveUserSession(userData);
+          if (consumeOAuthRedirectFlag()) setCurrentView('app');
+        }, 0);
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+        // Sem sessão no Supabase: mantém apenas o acesso de demonstração (visitante)
+        setCurrentUser((prev: any) => {
+          if (prev?.isGuest) return prev;
+          saveUserSession(null);
+          return null;
+        });
       }
     });
-    return () => unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch {
-      // ignore
-    }
-    localStorage.removeItem('gerenciie_user_session');
-    localStorage.removeItem('gerenciie_admin_unlocked');
+    await signOutUser();
     setCurrentUser(null);
     setCurrentView('landing');
     setActiveTab('overview');

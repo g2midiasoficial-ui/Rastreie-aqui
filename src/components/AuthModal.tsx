@@ -3,15 +3,13 @@ import {
   X, LogIn, Mail, Lock, User, ArrowRight, ShieldCheck, 
   Sparkles, CheckCircle2, AlertCircle, Globe, Play, KeyRound, Check
 } from 'lucide-react';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile
-} from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase.ts';
+import {
+  AuthMessageError,
+  authenticateWithEmail,
+  createGuestUser,
+  saveUserSession,
+  signInWithGoogle
+} from '../lib/auth.ts';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -35,144 +33,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [popupBlockedFallback, setPopupBlockedFallback] = useState(false);
 
   if (!isOpen) return null;
-
-  const saveUserSession = (userObj: any) => {
-    try {
-      localStorage.setItem('gerenciie_user_session', JSON.stringify(userObj));
-    } catch (e) {
-      console.warn('Local storage write error:', e);
-    }
-  };
-
-  const checkIsAdmin = (emailToCheck?: string | null) => {
-    if (!emailToCheck) return false;
-    const lower = emailToCheck.toLowerCase().trim();
-    return lower === 'betosouza3322@gmail.com';
-  };
-
-  const generateSafeUid = (emailStr: string) => {
-    let hash = 0;
-    for (let i = 0; i < emailStr.length; i++) {
-      hash = ((hash << 5) - hash) + emailStr.charCodeAt(i);
-      hash |= 0;
-    }
-    const clean = emailStr.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
-    return `usr_${Math.abs(hash).toString(36)}_${clean || 'member'}`;
-  };
-
-  const handleDirectGoogleConnect = async (customEmail?: string, customName?: string) => {
-    setLoading(true);
-    setError(null);
-    setPopupBlockedFallback(false);
-
-    const emailToUse = customEmail?.trim() || email.trim() || 'g2midiasoficial@gmail.com';
-    const nameToUse = customName?.trim() || name.trim() || emailToUse.split('@')[0];
-    const generatedUid = 'google_' + generateSafeUid(emailToUse);
-    const isAdmin = checkIsAdmin(emailToUse);
-
-    const userPayload = {
-      uid: generatedUid,
-      displayName: nameToUse,
-      email: emailToUse,
-      photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=0284c7,3b82f6`,
-      provider: 'google',
-      role: isAdmin ? 'admin' : 'user',
-      plan: isAdmin ? 'lifetime' : 'pro_annual'
-    };
-
-    try {
-      await setDoc(doc(db, 'users', generatedUid), {
-        uid: generatedUid,
-        email: emailToUse,
-        displayName: nameToUse,
-        photoURL: userPayload.photoURL,
-        provider: 'google',
-        role: userPayload.role,
-        plan: userPayload.plan,
-        connectedAt: serverTimestamp(),
-        lastLogin: serverTimestamp()
-      }, { merge: true });
-    } catch (err) {
-      console.warn('Firestore write warning:', err);
-    }
-
-    saveUserSession(userPayload);
-    setSuccessMsg(`Autenticado com sucesso via Google (${emailToUse})!`);
-    setTimeout(() => {
-      onSuccess(userPayload);
-      onClose();
-      setLoading(false);
-    }, 500);
-  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-    setPopupBlockedFallback(false);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      
-      const userEmail = result.user.email || '';
-      const isAdmin = checkIsAdmin(userEmail);
-
-      const userPayload = {
-        uid: result.user.uid,
-        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Google',
-        email: userEmail,
-        photoURL: result.user.photoURL || undefined,
-        provider: 'google',
-        role: isAdmin ? 'admin' : 'user',
-        plan: isAdmin ? 'lifetime' : 'pro_annual'
-      };
-
-      try {
-        await setDoc(doc(db, 'users', result.user.uid), {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: userPayload.displayName,
-          photoURL: result.user.photoURL,
-          provider: 'google',
-          role: userPayload.role,
-          plan: userPayload.plan,
-          lastLogin: serverTimestamp()
-        }, { merge: true });
-      } catch (e) {
-        console.warn('Firestore sync notice:', e);
-      }
-      
-      saveUserSession(userPayload);
-      setSuccessMsg(`Autenticado com sucesso via Google (${result.user.email})!`);
-      setTimeout(() => {
-        onSuccess(userPayload);
-        onClose();
-      }, 500);
+      // Redireciona para o Google; a sessão é tratada pelo App ao voltar
+      await signInWithGoogle();
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      const isAbortOrClosed = 
-        err?.code === 'auth/popup-closed-by-user' || 
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.toLowerCase().includes('aborted') ||
-        err?.message?.toLowerCase().includes('user aborted') ||
-        err?.name === 'AbortError';
-
-      if (isAbortOrClosed) {
-        setError('O processo de login com o Google foi cancelado pela janela pop-up.');
-      } else if (
-        err?.code === 'auth/popup-blocked' || 
-        err?.code === 'auth/unauthorized-domain' ||
-        err?.message?.includes('popup')
-      ) {
-        setPopupBlockedFallback(true);
-        setError('O pop-up de login foi bloqueado pelas políticas de iframe do navegador.');
-      } else {
-        setError(`Não foi possível autenticar com o Google: ${err?.message || 'Verifique sua conexão.'}`);
-      }
-    } finally {
+      setError(err?.message || 'Não foi possível autenticar com o Google.');
       setLoading(false);
     }
   };
@@ -181,202 +52,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setLoading(true);
     setError(null);
-
-    const cleanEmail = email.trim();
-    const cleanPassword = password.trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      setError('Por favor, informe seu e-mail e senha.');
-      setLoading(false);
-      return;
-    }
-
-    if (cleanPassword.length < 6) {
-      setError('A senha deve conter no mínimo 6 caracteres.');
-      setLoading(false);
-      return;
-    }
-
-    const isMasterAdmin = cleanEmail.toLowerCase() === 'betosouza3322@gmail.com';
-
-    // Verificação Direta do Administrador Master
-    if (isMasterAdmin) {
-      if (cleanPassword === 'Beto54321@') {
-        const adminPayload = {
-          uid: 'admin_betosouza',
-          displayName: 'Beto Souza (Admin Master)',
-          email: 'Betosouza3322@gmail.com',
-          photoURL: 'https://api.dicebear.com/7.x/initials/svg?seed=Beto%20Souza&backgroundColor=f59e0b,d97706',
-          role: 'admin',
-          plan: 'lifetime',
-          provider: 'password'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', 'admin_betosouza'), {
-            uid: 'admin_betosouza',
-            email: 'Betosouza3322@gmail.com',
-            displayName: 'Beto Souza (Admin Master)',
-            role: 'admin',
-            plan: 'lifetime',
-            provider: 'password',
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (err) {
-          console.warn('Firestore admin sync:', err);
-        }
-
-        saveUserSession(adminPayload);
-        setSuccessMsg('Acesso Master de Administrador liberado com sucesso!');
-        setTimeout(() => {
-          onSuccess(adminPayload);
-          onClose();
-          setLoading(false);
-        }, 400);
-        return;
-      } else {
-        setError('Senha de administrador incorreta.');
-        setLoading(false);
-        return;
-      }
-    }
+    setSuccessMsg(null);
 
     try {
-      if (mode === 'register') {
-        let userRecord: any = null;
-        try {
-          const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-          if (name.trim() && userRecord) {
-            try {
-              await updateProfile(userRecord, { displayName: name.trim() });
-            } catch (profileErr) {
-              console.warn('Profile update notice:', profileErr);
-            }
-          }
-        } catch (authErr: any) {
-          // Se o Firebase Auth acusar operation-not-allowed ou restrição de provedor, provisionar de forma segura
-          console.warn('Firebase Auth fallback provision:', authErr?.message || authErr);
-          const simulatedUid = generateSafeUid(cleanEmail);
-          userRecord = {
-            uid: simulatedUid,
-            email: cleanEmail,
-            displayName: name.trim() || cleanEmail.split('@')[0]
-          };
-        }
-
-        const isAdmin = checkIsAdmin(cleanEmail);
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: name.trim() || userRecord.displayName || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provider: 'password',
-          role: isAdmin ? 'admin' : 'user',
-          plan: isAdmin ? 'lifetime' : 'pro_annual'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: userPayload.displayName,
-            provider: 'password',
-            role: userPayload.role,
-            plan: userPayload.plan,
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Firestore sync notice:', e);
-        }
-
-        saveUserSession(userPayload);
-        setSuccessMsg('Conta criada com sucesso! Acessando seu painel...');
-        setTimeout(() => {
-          onSuccess(userPayload);
-          onClose();
-        }, 400);
-
-      } else {
-        // Modo Login
-        let userRecord: any = null;
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          userRecord = userCred.user;
-        } catch (authErr: any) {
-          if (authErr?.code === 'auth/wrong-password' || authErr?.code === 'auth/invalid-credential') {
-            throw authErr;
-          }
-          console.warn('Firebase Auth login fallback:', authErr?.message || authErr);
-          const simulatedUid = generateSafeUid(cleanEmail);
-          userRecord = {
-            uid: simulatedUid,
-            email: cleanEmail,
-            displayName: cleanEmail.split('@')[0]
-          };
-        }
-
-        const isAdmin = checkIsAdmin(cleanEmail);
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: userRecord.displayName || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          photoURL: userRecord.photoURL || undefined,
-          provider: 'password',
-          role: isAdmin ? 'admin' : 'user',
-          plan: isAdmin ? 'lifetime' : 'pro_annual'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: userPayload.displayName,
-            role: userPayload.role,
-            plan: userPayload.plan,
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (e) {
-          console.warn('Firestore sync notice:', e);
-        }
-
-        saveUserSession(userPayload);
-        setSuccessMsg(`Acessando o painel...`);
-        setTimeout(() => {
-          onSuccess(userPayload);
-          onClose();
-        }, 400);
-      }
-    } catch (err: any) {
-      console.error('Email Auth Error:', err);
-      if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
-        const simulatedUid = generateSafeUid(cleanEmail);
-        const userPayload = {
-          uid: simulatedUid,
-          displayName: name.trim() || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provider: 'password',
-          role: checkIsAdmin(cleanEmail) ? 'admin' : 'user',
-          plan: 'pro_annual'
-        };
-        saveUserSession(userPayload);
-        onSuccess(userPayload);
-        onClose();
+      const result = await authenticateWithEmail(mode, email, password, name);
+      if (result.status === 'confirm_email') {
+        setSuccessMsg('Conta criada! Enviamos um link de confirmação para o seu e-mail. Confirme e depois faça login.');
+        setMode('login');
+        setPassword('');
         return;
       }
-      let message = 'Ocorreu um erro ao entrar.';
-      if (err.code === 'auth/invalid-email') {
-        message = 'O formato do e-mail inserido é inválido.';
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        message = 'E-mail ou senha incorretos. Verifique os dados ou crie uma conta.';
-      } else if (err.code === 'auth/email-already-in-use') {
-        message = 'Este e-mail já está cadastrado. Alterne para o modo de Login.';
-      } else if (err.code === 'auth/weak-password') {
-        message = 'A senha informada é fraca. Utilize pelo menos 6 caracteres.';
-      } else if (err.message) {
-        message = err.message.replace(/Firebase: Error \((.*?)\)\.?/gi, '$1');
-      }
-      setError(message);
+      saveUserSession(result.user);
+      setSuccessMsg(mode === 'register' ? 'Conta criada com sucesso! Acessando seu painel...' : 'Acessando o painel...');
+      setTimeout(() => {
+        onSuccess(result.user);
+        onClose();
+      }, 400);
+    } catch (err: any) {
+      console.error('Email Auth Error:', err);
+      setError(err instanceof AuthMessageError ? err.message : 'Ocorreu um erro ao entrar.');
     } finally {
       setLoading(false);
     }
@@ -384,13 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleQuickAccess = (presetName: string, presetEmail: string) => {
     setLoading(true);
-    const guestUser = {
-      uid: 'user_' + Math.random().toString(36).substring(2, 9),
-      displayName: presetName,
-      email: presetEmail,
-      isGuest: true,
-      provider: 'quick_access'
-    };
+    const guestUser = createGuestUser(presetName, presetEmail);
     saveUserSession(guestUser);
     setSuccessMsg(`Entrando como ${presetName}...`);
     setTimeout(() => {
@@ -468,29 +156,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-700 text-xs font-bold animate-in fade-in">
               <AlertCircle size={16} className="shrink-0 text-rose-600 mt-0.5" />
               <span>{error}</span>
-            </div>
-          )}
-
-          {popupBlockedFallback && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-3 animate-in fade-in">
-              <div className="flex items-start gap-2.5">
-                <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-black text-blue-950">Conexão Google Direta (Sem Pop-up)</h4>
-                  <p className="text-[11px] text-blue-800 mt-0.5">
-                    Como o navegador reteve a janela pop-up, conecte sua conta Google com 1 clique abaixo:
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleDirectGoogleConnect('g2midiasoficial@gmail.com', 'G2 Mídias Oficial')}
-                disabled={loading}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-              >
-                <Check size={14} />
-                <span>Conectar g2midiasoficial@gmail.com Agora</span>
-              </button>
             </div>
           )}
 
@@ -604,7 +269,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold pt-2 border-t border-slate-100">
             <ShieldCheck size={13} className="text-emerald-500" />
-            <span>Ambiente Seguro com Criptografia SSL e Firestore Sync</span>
+            <span>Ambiente Seguro com Criptografia SSL e Supabase Sync</span>
           </div>
         </div>
       </div>
