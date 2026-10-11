@@ -26,6 +26,7 @@ import {
   Truck
 } from 'lucide-react';
 import { PricingData } from '../../types';
+import { supabase } from '../lib/supabase';
 import { generateExtensionFiles, downloadExtensionZip, ExtensionFiles } from '../utils/extensionPackageGenerator';
 
 interface BrowserExtensionModalProps {
@@ -49,17 +50,16 @@ export function BrowserExtensionModal({
   const [selectedFile, setSelectedFile] = useState<keyof ExtensionFiles>('manifest.json');
   const [isDownloading, setIsDownloading] = useState(false);
   const [copiedFile, setCopiedFile] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   if (!isOpen) return null;
 
   const files = generateExtensionFiles(pricingData, currentUser);
 
-  const pairingToken = currentUser?.email 
-    ? `GP-AUTH-${btoa(currentUser.email).substring(0, 16).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
-    : 'GP-AUTH-DEMO-CONEXAO-PROJETO-2026';
-
+  const canSetPassword = !!currentUser?.uid && !currentUser?.isGuest;
   const handleDownloadZip = async () => {
     try {
       setIsDownloading(true);
@@ -79,10 +79,23 @@ export function BrowserExtensionModal({
     setTimeout(() => setCopiedFile(false), 2000);
   };
 
-  const handleCopyToken = () => {
-    navigator.clipboard.writeText(pairingToken);
-    setCopiedToken(true);
-    setTimeout(() => setCopiedToken(false), 2000);
+  // Define a senha da conta (útil para quem entrou com o Google usar a extensão)
+  const handleSetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setPasswordMsg({ ok: false, text: 'A senha deve ter no mínimo 6 caracteres.' });
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordMsg(null);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setPasswordSaving(false);
+    if (error) {
+      setPasswordMsg({ ok: false, text: error.code === 'same_password' ? 'Essa já é a sua senha atual.' : `Não foi possível salvar: ${error.message}` });
+      return;
+    }
+    setNewPassword('');
+    setPasswordMsg({ ok: true, text: 'Senha salva! Use seu e-mail e essa senha para entrar na extensão.' });
   };
 
   return (
@@ -221,7 +234,7 @@ export function BrowserExtensionModal({
                       className="py-3 px-5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-700 flex items-center gap-2"
                     >
                       <KeyRound size={14} />
-                      Ver Token de Login
+                      Como Entrar na Extensão
                     </button>
                   </div>
                 </div>
@@ -268,7 +281,7 @@ export function BrowserExtensionModal({
                   </div>
                   <h4 className="text-xs font-black text-white">Login & Conexão Direta</h4>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Acesse sua conta na extensão usando seu e-mail, senha ou token rápido de 1-clique.
+                    Entre na extensão com o mesmo e-mail e senha da sua conta Gerenciie Pro.
                   </p>
                 </div>
 
@@ -337,33 +350,46 @@ export function BrowserExtensionModal({
                   )}
                 </div>
 
-                {/* Token / Pairing Key Section */}
+                {/* Senha para a extensão */}
                 <div className="mt-6 space-y-4">
                   <div>
                     <h4 className="text-sm font-black text-white flex items-center gap-2">
                       <KeyRound size={16} className="text-cyan-400" />
-                      Token de Pareamento Rápido da Extensão
+                      Senha para a Extensão
                     </h4>
                     <p className="text-xs text-slate-400 mt-1">
-                      Use este token para autenticar a extensão instantaneamente sem digitar sua senha.
+                      A extensão entra com e-mail e senha. Se você criou a conta com o Google, defina uma senha aqui. Se já tem senha, pode trocá-la.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
-                    <input
-                      type="text"
-                      readOnly
-                      value={pairingToken}
-                      className="flex-1 bg-transparent text-cyan-300 font-mono text-xs font-bold outline-none select-all"
-                    />
-                    <button
-                      onClick={handleCopyToken}
-                      className="py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-                    >
-                      {copiedToken ? <Check size={14} /> : <Copy size={14} />}
-                      <span>{copiedToken ? 'Copiado!' : 'Copiar Token'}</span>
-                    </button>
-                  </div>
+                  {canSetPassword ? (
+                    <form onSubmit={handleSetPassword} className="flex flex-col sm:flex-row items-stretch gap-2 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Nova senha (mínimo 6 caracteres)"
+                        autoComplete="new-password"
+                        className="flex-1 bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-3 py-2 text-white text-xs font-bold outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={passwordSaving}
+                        className="py-2 px-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+                      >
+                        <Lock size={14} />
+                        <span>{passwordSaving ? 'Salvando...' : 'Salvar Senha'}</span>
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="text-xs text-slate-400 bg-slate-900 border border-slate-800 p-3 rounded-2xl">
+                      Faça login com sua conta (não como visitante) para definir a senha.
+                    </p>
+                  )}
+
+                  {passwordMsg && (
+                    <p className={`text-xs font-bold ${passwordMsg.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{passwordMsg.text}</p>
+                  )}
                 </div>
 
                 {/* 3 Steps to Connect */}
@@ -372,23 +398,23 @@ export function BrowserExtensionModal({
                     <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">1</span>
                     <h5 className="text-xs font-black text-white">Baixe o Pacote (.ZIP)</h5>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Ao baixar o pacote enquanto estiver logado aqui, seus dados já vêm pré-configurados!
+                      Baixe o .ZIP e carregue a pasta em chrome://extensions com o "Modo do desenvolvedor" ligado.
                     </p>
                   </div>
 
                   <div className="p-4 bg-slate-900/60 rounded-2xl border border-slate-800/80 space-y-2">
                     <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">2</span>
-                    <h5 className="text-xs font-black text-white">Abra a Aba "Conectar"</h5>
+                    <h5 className="text-xs font-black text-white">Abra a Extensão</h5>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Na extensão no Chrome, clique na 3ª aba no topo para acessar a tela de autenticação.
+                      Clique no ícone do Gerenciie Pro no Chrome. A tela de login aparece logo de início.
                     </p>
                   </div>
 
                   <div className="p-4 bg-slate-900/60 rounded-2xl border border-slate-800/80 space-y-2">
                     <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-black">3</span>
-                    <h5 className="text-xs font-black text-white">Entre ou Cole o Token</h5>
+                    <h5 className="text-xs font-black text-white">Entre com sua Conta</h5>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Entre com seu e-mail/senha ou cole a chave de pareamento acima para sincronizar na hora.
+                      Use o mesmo e-mail e senha do site. A extensão fica conectada até você sair.
                     </p>
                   </div>
                 </div>

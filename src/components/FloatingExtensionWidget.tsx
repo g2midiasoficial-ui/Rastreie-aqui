@@ -67,8 +67,8 @@ export function FloatingExtensionWidget({
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     return !!(currentUser?.email);
   });
-  const [authEmail, setAuthEmail] = useState(currentUser?.email || 'g2midiasoficial@gmail.com');
-  const [authPassword, setAuthPassword] = useState('gerenciie123');
+  const [authEmail, setAuthEmail] = useState(currentUser?.email || '');
+  const [authPassword, setAuthPassword] = useState('');
   const [authTab, setAuthTab] = useState<'email' | 'token'>('email');
   const [authToken, setAuthToken] = useState('');
   const [loginAlert, setLoginAlert] = useState<string | null>(null);
