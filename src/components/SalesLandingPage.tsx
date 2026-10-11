@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  ArrowRight, ShieldCheck, Sparkles, CheckCircle2, TrendingUp, 
-  BarChart3, DollarSign, Calculator, Lock, User, Mail, LogIn, X,
-  ChevronDown, ChevronUp, Star, Award, Layers, Zap, Check,
-  ExternalLink, Globe, HelpCircle, ArrowUpRight, Play, Eye, AlertCircle
+import {
+  ArrowRight, ShieldCheck, CheckCircle2, BarChart3, Calculator, Lock, X,
+  ChevronDown, Award, Layers, Check, Globe, Play, AlertCircle, Menu,
+  Receipt, Target, Wallet, Bot, MessageCircle, CalendarClock, PiggyBank,
+  ShoppingCart, Car, Puzzle
 } from 'lucide-react';
 import {
   AuthMessageError,
@@ -100,384 +100,673 @@ export function SalesLandingPage({
     }, 400);
   };
 
-  const scrollToLogin = () => {
-    const el = document.getElementById('login-section');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const faqs = [
     {
       q: 'O que é o Gerenciie Pro?',
-      a: 'É a plataforma financeira e de gestão definitiva para operações de E-commerce, Dropshipping, Shopee, Mercado Livre e TikTok Shop. Ela calcula o markup real, impostos, taxas de gateway, taxa de frete e o CPA Breakeven para que você nunca mais venda no prejuízo.'
+      a: 'É uma plataforma de gestão para quem vende em e-commerce, dropshipping, Shopee, Mercado Livre e TikTok Shop. Ela calcula o lucro real de cada venda, considerando custos, taxas, impostos e anúncios, e organiza as finanças da loja e pessoais.'
     },
     {
-      q: 'Preciso ter uma conta para usar a calculadora?',
-      a: 'Você pode testar a plataforma instantaneamente com acesso rápido, mas criar sua conta gratuita garante que todos os seus produtos salvos, campanhas de tráfego e simulações fiquem salvos em nuvem para sempre.'
+      q: 'Preciso de cartão de crédito para começar?',
+      a: 'Não. Você cria a conta grátis com e-mail ou Google. Também dá para testar sem cadastro, mas nesse modo os dados ficam só no seu navegador.'
     },
     {
-      q: 'Como funciona a Bússola de Métricas e o CPA Breakeven?',
-      a: 'A bússola analisa seus custos diretos (CMV, frete, embalagem) e deduções variáveis (impostos, checkout, gateway). Com isso, calculamos o valor exato que você pode gastar em anúncios (Facebook Ads, TikTok Ads, Google Ads) por venda sem perder dinheiro.'
+      q: 'O que é CPA Breakeven?',
+      a: 'É o valor máximo que você pode pagar em anúncios por venda sem ter prejuízo. A plataforma calcula esse número a partir do preço, do custo do produto e de todas as taxas do canal.'
     },
     {
-      q: 'Suporta múltiplas moedas e canais de venda?',
-      a: 'Sim! O sistema inclui suporte para BRL, USD, EUR, GBP, JPY, CNY e moedas latino-americanas, além de regras pré-configuradas para Dropshipping, Shopee, Mercado Livre e TikTok Shop.'
+      q: 'Como funcionam os agentes de IA?',
+      a: 'O Agente CFO analisa seu produto, suas campanhas e seu caixa e responde perguntas em português. O agente estilo WhatsApp entende mensagens como "gastei 50 no mercado" e lança a despesa automaticamente. É preciso estar logado para usar.'
+    },
+    {
+      q: 'Meus dados ficam seguros?',
+      a: 'Sim. Os dados ficam salvos na nuvem e cada conta acessa somente as próprias informações. O login é protegido por senha ou pela sua conta Google.'
+    },
+    {
+      q: 'Funciona com outras moedas?',
+      a: 'Sim. A calculadora aceita real, dólar, euro, libra, iene, yuan e moedas da América Latina, como peso argentino, chileno, mexicano e colombiano e o sol peruano.'
     }
   ];
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Simulador do topo da página (versão simplificada da calculadora completa)
+  const [simCost, setSimCost] = useState(52.5);
+  const [simPrice, setSimPrice] = useState(149.9);
+  const [simFees, setSimFees] = useState(18);
+  const [simAds, setSimAds] = useState(35);
+
+  const simFeesValue = simPrice * (simFees / 100);
+  const simBreakevenCpa = simPrice - simCost - simFeesValue;
+  const simProfit = simBreakevenCpa - simAds;
+  const simMargin = simPrice > 0 ? (simProfit / simPrice) * 100 : 0;
+  const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const goToApp = () => (currentUser ? onEnterPlatform() : openAuthModal('register'));
+
+  const navLinks = [
+    { href: '#recursos', label: 'Recursos' },
+    { href: '#ia', label: 'Agentes de IA' },
+    { href: '#como-funciona', label: 'Como funciona' },
+    { href: '#planos', label: 'Planos' },
+    { href: '#faq', label: 'Dúvidas' }
+  ];
+
+  const pains = [
+    {
+      icon: Receipt,
+      title: 'Taxas que comem a margem',
+      text: 'Comissão do marketplace, gateway, checkout, imposto e frete somados levam embora um pedaço do preço que você nem percebe.'
+    },
+    {
+      icon: Target,
+      title: 'Anúncio acima do limite',
+      text: 'Sem saber o CPA máximo, cada venda paga pelo tráfego pode estar dando prejuízo enquanto o faturamento cresce.'
+    },
+    {
+      icon: Layers,
+      title: 'Dinheiro da loja e pessoal misturados',
+      text: 'Contas, cartões, dívidas e despesas da casa no mesmo lugar escondem quanto a operação realmente lucra.'
+    }
+  ];
+
+  const pillars = [
+    {
+      tag: 'E-commerce & Tráfego',
+      color: 'blue',
+      icon: Calculator,
+      title: 'Saiba o lucro real de cada venda',
+      items: [
+        'Calculadora de preço com CMV, frete, embalagem, ICMS, gateway, checkout e reserva',
+        'CPA Breakeven: o máximo que você pode pagar por venda em anúncios',
+        'Planejamento de Ads e Bússola de Métricas',
+        'DRE financeiro e simulação de escala do faturamento'
+      ]
+    },
+    {
+      tag: 'Finanças da loja e pessoais',
+      color: 'emerald',
+      icon: Wallet,
+      title: 'Organize o dinheiro em um só lugar',
+      items: [
+        'Contas, cartões, receitas, despesas e extrato',
+        'Dívidas e parcelas, metas e reservas',
+        'Agenda de vencimentos, categorias com teto de gastos e relatórios',
+        'Modos separados para você e para a empresa'
+      ]
+    },
+    {
+      tag: 'Inteligência Artificial',
+      color: 'indigo',
+      icon: Bot,
+      title: 'Um CFO de bolso que conhece seus números',
+      items: [
+        'Agente CFO que analisa produto, tráfego e caixa juntos',
+        'Agente estilo WhatsApp que registra gastos por mensagem',
+        'Sugestões de oferta, kits e pontos de atenção do caixa',
+        'Respostas em português, direto ao ponto'
+      ]
+    }
+  ];
+
+  const pillarColors: Record<string, { badge: string; icon: string; check: string }> = {
+    blue: { badge: 'text-blue-300 bg-blue-500/10 border-blue-500/20', icon: 'bg-blue-500/10 text-blue-400', check: 'text-blue-400' },
+    emerald: { badge: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20', icon: 'bg-emerald-500/10 text-emerald-400', check: 'text-emerald-400' },
+    indigo: { badge: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/20', icon: 'bg-indigo-500/10 text-indigo-400', check: 'text-indigo-400' }
+  };
+
+  const extras = [
+    { icon: CalendarClock, label: 'Agenda & vencimentos' },
+    { icon: PiggyBank, label: 'Metas & reservas' },
+    { icon: BarChart3, label: 'Relatórios & gráficos' },
+    { icon: ShoppingCart, label: 'Lista de mercado' },
+    { icon: Car, label: 'Veículos & combustível' },
+    { icon: Award, label: 'Gamificação & níveis' },
+    { icon: Puzzle, label: 'Extensão do navegador' },
+    { icon: Globe, label: 'Várias moedas' }
+  ];
+
+  const channels = ['Dropshipping', 'Shopee', 'Mercado Livre', 'TikTok Shop'];
+
+  const steps = [
+    { n: '1', title: 'Crie sua conta', text: 'Cadastro gratuito com e-mail ou Google, em menos de um minuto.' },
+    { n: '2', title: 'Cadastre seus custos', text: 'Informe custo do produto, taxas do canal e quanto investe em anúncios.' },
+    { n: '3', title: 'Decida com números', text: 'Veja margem, CPA máximo e lucro projetado, e pergunte ao Agente CFO.' }
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white font-['Plus_Jakarta_Sans'] selection:bg-blue-600 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-white font-['Plus_Jakarta_Sans'] antialiased selection:bg-blue-600 selection:text-white">
       {/* Barra de Navegação Superior */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg shadow-blue-500/25">
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-slate-950/80 border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <a href="#topo" className="flex items-center gap-2.5 shrink-0">
+            <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-xl flex items-center justify-center font-extrabold text-white text-lg shadow-lg shadow-blue-500/25">
               G
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-xl tracking-tight text-white">GERENCIIE</span>
-                <span className="text-[10px] font-black tracking-widest uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-md">
-                  PRO CFO
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Gestão Financeira & Tráfego</p>
-            </div>
-          </div>
+            <span className="font-extrabold text-lg tracking-tight text-white">Gerenciie</span>
+            <span className="hidden sm:inline text-[10px] font-bold tracking-wider uppercase bg-blue-500/15 text-blue-300 border border-blue-500/25 px-1.5 py-0.5 rounded-md">
+              Pro
+            </span>
+          </a>
 
-          <nav className="hidden md:flex items-center gap-8 text-xs font-bold text-slate-300">
-            <a href="#recursos" className="hover:text-white transition-colors">Recursos</a>
-            <a href="#planos" className="hover:text-white transition-colors">Planos</a>
-            <a href="#faq" className="hover:text-white transition-colors">Perguntas Frequentes</a>
+          <nav className="hidden lg:flex items-center gap-7 text-sm font-medium text-slate-300">
+            {navLinks.map((l) => (
+              <a key={l.href} href={l.href} className="hover:text-white transition-colors">{l.label}</a>
+            ))}
           </nav>
 
-          <div className="flex items-center gap-3">
-            {onOpenAdmin && (
+          <div className="flex items-center gap-2">
+            {onOpenAdmin && currentUser?.role === 'admin' && (
               <button
                 onClick={onOpenAdmin}
-                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-extrabold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                className="hidden sm:flex px-3 py-2 rounded-lg text-amber-300 hover:bg-amber-500/10 font-semibold text-xs items-center gap-1.5 transition-colors cursor-pointer"
                 title="Acessar Painel de Administração"
               >
-                <ShieldCheck size={14} className="text-amber-400" />
-                <span>Painel Admin</span>
+                <ShieldCheck size={14} />
+                <span>Admin</span>
               </button>
             )}
 
             {currentUser ? (
               <button
                 onClick={onEnterPlatform}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-white text-slate-950 hover:bg-slate-200 font-bold text-sm flex items-center gap-2 transition-colors cursor-pointer"
               >
-                <Sparkles size={14} />
-                <span>Boas-vindas, {currentUser.displayName?.split(' ')[0] || 'Lojista'}!</span>
-                <ArrowRight size={14} />
+                <span>Abrir painel</span>
+                <ArrowRight size={15} />
               </button>
             ) : (
-              <button
-                onClick={() => openAuthModal('login')}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-              >
-                <LogIn size={14} />
-                <span>Entrar</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <section className="relative pt-16 pb-24 overflow-hidden">
-        {/* Glows de Fundo */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/15 blur-[140px] rounded-full pointer-events-none" />
-        <div className="absolute top-1/3 right-10 w-[400px] h-[400px] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none" />
-
-        <div className="max-w-7xl mx-auto px-6 relative z-10">
-          <div className="text-center max-w-3xl mx-auto space-y-6">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-black uppercase tracking-wider">
-              <Sparkles size={14} className="animate-spin text-blue-400" />
-              <span>A Ferramenta Definitiva para E-commerce & Dropshipping</span>
-            </div>
-
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.08] italic">
-              Pare de Vender Muito e <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-teal-300">Lucrar Pouco</span>.
-            </h1>
-
-            <p className="text-lg text-slate-300 leading-relaxed font-medium">
-              Calcule seu <strong className="text-white">CPA Breakeven</strong>, projete escalas com precisão cirúrgica, domine seu <strong className="text-white">DRE Financeiro</strong> e precifique produtos em múltiplos canais sem erros.
-            </p>
-
-            {currentUser ? (
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-                <button
-                  onClick={onEnterPlatform}
-                  className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-2xl font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] cursor-pointer"
-                >
-                  <Sparkles size={18} />
-                  <span>Boas-vindas, {currentUser.displayName || 'Lojista'}! Acessar Meu Painel</span>
-                  <ArrowRight size={18} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+              <>
                 <button
                   onClick={() => openAuthModal('login')}
-                  className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-xl shadow-blue-600/30 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] cursor-pointer"
+                  className="hidden sm:block px-4 py-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/5 font-semibold text-sm transition-colors cursor-pointer"
                 >
-                  <LogIn size={18} />
-                  <span>Entrar no Sistema</span>
-                  <ArrowRight size={18} />
+                  Entrar
                 </button>
-
                 <button
                   onClick={() => openAuthModal('register')}
-                  className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 rounded-2xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors cursor-pointer"
                 >
-                  <Sparkles size={18} className="text-blue-400" />
-                  <span>Criar Conta Gratuita</span>
+                  Começar grátis
                 </button>
-              </div>
+              </>
             )}
 
-            {/* Badges de Confiança */}
-            <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-bold">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-emerald-400" />
-                <span>Sem necessidade de cartão</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-emerald-400" />
-                <span>Nuvem Supabase em Tempo Real</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-emerald-400" />
-                <span>Dropshipping & Marketplaces</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Seção Recursos & Módulos */}
-      <section id="recursos" className="py-24 max-w-7xl mx-auto px-6">
-        <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight italic">
-            Tudo o que Você Precisa para Dominar seus Números
-          </h2>
-          <p className="text-slate-400 text-sm">
-            Ferramentas construídas especificamente para a realidade tributária e de tráfego de lojistas brasileiros.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 1 */}
-          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-4 hover:border-slate-700 transition-colors">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-black">
-              <Calculator size={24} />
-            </div>
-            <h3 className="text-lg font-black text-white">Precificação & Markup Real</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Cálculo completo incluindo CMV, ICMS, embalagens, taxa Yampi/CartPanda, gateway de pagamento, reserva e imposto Simples/MEI.
-            </p>
-          </div>
-
-          {/* Card 2 */}
-          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-4 hover:border-slate-700 transition-colors">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-black">
-              <TrendingUp size={24} />
-            </div>
-            <h3 className="text-lg font-black text-white">Bússola de Tráfego & CPA Limite</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Descubra seu CPA Breakeven e CPA Ideal antes de gastar 1 centavo em anúncios no Facebook Ads ou TikTok Ads.
-            </p>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-[32px] space-y-4 hover:border-slate-700 transition-colors">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-black">
-              <BarChart3 size={24} />
-            </div>
-            <h3 className="text-lg font-black text-white">DRE Financeiro & Escala</h3>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Demonstrativo de Resultados estruturado e simulador de escala para prever lucro líquido com 2x, 5x e 10x de faturamento.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Seção de Planos */}
-      <section id="planos" className="py-20 bg-slate-900/40 border-t border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
-            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight italic">
-              Planos Transparentes para Cada Fase
-            </h2>
-            <p className="text-slate-400 text-sm">
-              Comece gratuitamente hoje mesmo e escale sua operação com segurança.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-5xl mx-auto">
-            {/* Plano Free */}
-            <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 flex flex-col justify-between space-y-6">
-              <div className="space-y-4">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
-                  Iniciante
-                </span>
-                <h3 className="text-2xl font-black text-white">Free Starter</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-white">R$ 0</span>
-                  <span className="text-xs text-slate-400 font-bold">/mês</span>
-                </div>
-                <ul className="space-y-3 pt-4 text-xs text-slate-300 font-medium">
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Calculadora de Precificação Completa</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>CPA Breakeven & Margem Líquida</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Multi-moeda (BRL, USD, EUR)</span>
-                  </li>
-                </ul>
-              </div>
-              <button
-                onClick={() => openAuthModal('register')}
-                className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
-              >
-                Criar Conta Gratuita
-              </button>
-            </div>
-
-            {/* Plano Pro CFO (Destacado) */}
-            <div className="bg-gradient-to-b from-blue-900/40 to-slate-900 border-2 border-blue-500/80 rounded-[32px] p-8 flex flex-col justify-between space-y-6 relative shadow-2xl shadow-blue-500/10">
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1 rounded-full shadow-md">
-                Mais Recomendado
-              </div>
-              <div className="space-y-4">
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-400 bg-blue-500/20 px-3 py-1 rounded-full">
-                  Lojista Profissional
-                </span>
-                <h3 className="text-2xl font-black text-white">Pro CFO Unlimited</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-white">R$ 49</span>
-                  <span className="text-xs text-slate-400 font-bold">/mês</span>
-                </div>
-                <ul className="space-y-3 pt-4 text-xs text-slate-200 font-medium">
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Tudo do Plano Free</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Sincronização em Nuvem Supabase</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Simulador de Planejamento de Tráfego</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Exportação de Relatórios DRE em CSV</span>
-                  </li>
-                </ul>
-              </div>
-              <button
-                onClick={() => openAuthModal('register')}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
-              >
-                Garantir Acesso Pro
-              </button>
-            </div>
-
-            {/* Plano Enterprise */}
-            <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-8 flex flex-col justify-between space-y-6">
-              <div className="space-y-4">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-800 px-3 py-1 rounded-full">
-                  Agências & Grandes Operações
-                </span>
-                <h3 className="text-2xl font-black text-white">Enterprise VIP</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-white">R$ 149</span>
-                  <span className="text-xs text-slate-400 font-bold">/mês</span>
-                </div>
-                <ul className="space-y-3 pt-4 text-xs text-slate-300 font-medium">
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Multi-usuários & Equipe</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Múltiplas Lojas & Canais</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check size={14} className="text-emerald-400" />
-                    <span>Suporte Prioritário com Especialista</span>
-                  </li>
-                </ul>
-              </div>
-              <button
-                onClick={() => openAuthModal('register')}
-                className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
-              >
-                Falar com Consultor
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Seção FAQ */}
-      <section id="faq" className="py-20 max-w-4xl mx-auto px-6">
-        <div className="text-center mb-12 space-y-3">
-          <h2 className="text-3xl font-black text-white tracking-tight italic">
-            Perguntas Frequentes
-          </h2>
-          <p className="text-slate-400 text-xs">
-            Tire suas dúvidas sobre a operação do sistema.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {faqs.map((faq, idx) => (
-            <div 
-              key={idx} 
-              className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden transition-colors"
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden w-9 h-9 rounded-lg hover:bg-white/5 flex items-center justify-center text-slate-300 cursor-pointer"
+              aria-label="Abrir menu"
             >
-              <button
-                type="button"
-                onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
-                className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-sm text-white cursor-pointer"
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
+        </div>
+
+        {mobileMenuOpen && (
+          <nav className="lg:hidden border-t border-white/5 px-4 py-3 flex flex-col text-sm font-medium text-slate-300">
+            {navLinks.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-2.5 hover:text-white transition-colors"
               >
-                <span>{faq.q}</span>
-                {openFaq === idx ? <ChevronUp size={18} className="text-blue-400 shrink-0" /> : <ChevronDown size={18} className="text-slate-500 shrink-0" />}
+                {l.label}
+              </a>
+            ))}
+            {!currentUser && (
+              <button
+                onClick={() => { setMobileMenuOpen(false); openAuthModal('login'); }}
+                className="py-2.5 text-left hover:text-white transition-colors cursor-pointer"
+              >
+                Entrar na conta
               </button>
-              {openFaq === idx && (
-                <div className="px-5 pb-5 text-xs text-slate-300 leading-relaxed border-t border-slate-800/60 pt-4 animate-in fade-in duration-200">
-                  {faq.a}
-                </div>
+            )}
+            {onOpenAdmin && currentUser?.role === 'admin' && (
+              <button
+                onClick={() => { setMobileMenuOpen(false); onOpenAdmin(); }}
+                className="py-2.5 text-left text-amber-300 cursor-pointer"
+              >
+                Painel Admin
+              </button>
+            )}
+          </nav>
+        )}
+      </header>
+
+      {/* Hero */}
+      <section id="topo" className="relative overflow-hidden">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-blue-600/20 blur-[160px] rounded-full pointer-events-none" />
+        <div className="absolute top-40 -right-40 w-[500px] h-[500px] bg-indigo-600/10 blur-[140px] rounded-full pointer-events-none" />
+
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-14 sm:pt-20 pb-20 grid lg:grid-cols-[1.1fr_1fr] gap-12 lg:gap-14 items-center">
+          <div className="space-y-7 text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Para e-commerce, dropshipping e marketplaces
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
+              Pare de vender muito e{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-300">
+                lucrar pouco.
+              </span>
+            </h1>
+
+            <p className="text-lg text-slate-300 leading-relaxed max-w-xl mx-auto lg:mx-0">
+              Descubra o lucro real de cada venda, o máximo que você pode pagar em anúncios e para onde vai o dinheiro da sua operação. Com um Agente CFO de IA para tirar as dúvidas.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
+              <button
+                onClick={goToApp}
+                className="w-full sm:w-auto px-7 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-base shadow-xl shadow-blue-600/25 flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5 cursor-pointer"
+              >
+                {currentUser ? `Abrir meu painel, ${currentUser.displayName?.split(' ')[0] || 'lojista'}` : 'Criar conta grátis'}
+                <ArrowRight size={18} />
+              </button>
+              {!currentUser && (
+                <button
+                  onClick={() => handleQuickLogin('Visitante', 'visitante@gerenciie.com.br')}
+                  className="w-full sm:w-auto px-7 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold text-base flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Play size={16} className="text-blue-300" />
+                  Testar sem cadastro
+                </button>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 text-sm text-slate-400">
+              <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-emerald-400" /> Sem cartão de crédito</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-emerald-400" /> Entre com Google</span>
+              <span className="flex items-center gap-1.5"><CheckCircle2 size={16} className="text-emerald-400" /> Dados salvos na nuvem</span>
+            </div>
+          </div>
+
+          {/* Simulador */}
+          <div className="relative">
+            <div className="absolute -inset-px rounded-[28px] bg-gradient-to-b from-blue-500/40 via-indigo-500/20 to-transparent pointer-events-none" />
+            <div className="relative bg-slate-900/90 backdrop-blur rounded-[28px] p-6 sm:p-7 shadow-2xl">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Simulador rápido</p>
+                  <h2 className="text-lg font-bold text-white">Quanto sobra de cada venda?</h2>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                  <Calculator size={20} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Custo do produto', value: simCost, set: setSimCost, prefix: 'R$' },
+                  { label: 'Preço de venda', value: simPrice, set: setSimPrice, prefix: 'R$' },
+                  { label: 'Taxas e impostos', value: simFees, set: setSimFees, suffix: '%' },
+                  { label: 'Anúncio por venda', value: simAds, set: setSimAds, prefix: 'R$' }
+                ].map((f) => (
+                  <label key={f.label} className="block">
+                    <span className="text-xs font-medium text-slate-400">{f.label}</span>
+                    <div className="mt-1 flex items-center bg-slate-950 border border-slate-800 focus-within:border-blue-500 rounded-xl px-3 transition-colors">
+                      {f.prefix && <span className="text-sm text-slate-500 mr-1">{f.prefix}</span>}
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        value={Number.isFinite(f.value) ? f.value : 0}
+                        onChange={(e) => f.set(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="w-full min-w-0 py-2.5 bg-transparent text-sm font-semibold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      {f.suffix && <span className="text-sm text-slate-500 ml-1">{f.suffix}</span>}
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-2.5">
+                <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+                  <p className="text-[11px] font-medium text-slate-400">Lucro por venda</p>
+                  <p className={`mt-1 text-base sm:text-lg font-extrabold ${simProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{brl(simProfit)}</p>
+                </div>
+                <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+                  <p className="text-[11px] font-medium text-slate-400">Margem líquida</p>
+                  <p className={`mt-1 text-base sm:text-lg font-extrabold ${simMargin >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{simMargin.toFixed(1)}%</p>
+                </div>
+                <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3">
+                  <p className="text-[11px] font-medium text-slate-400">CPA máximo</p>
+                  <p className="mt-1 text-base sm:text-lg font-extrabold text-white">{brl(Math.max(0, simBreakevenCpa))}</p>
+                </div>
+              </div>
+
+              <p className={`mt-4 text-sm font-medium rounded-xl px-3 py-2.5 flex items-start gap-2 ${
+                simProfit >= 0 ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'
+              }`}>
+                {simProfit >= 0 ? <CheckCircle2 size={16} className="shrink-0 mt-0.5" /> : <AlertCircle size={16} className="shrink-0 mt-0.5" />}
+                {simProfit >= 0
+                  ? `Cada venda deixa ${brl(simProfit)} no bolso. Acima de ${brl(Math.max(0, simBreakevenCpa))} por venda em anúncio, dá prejuízo.`
+                  : `Com esse anúncio, cada venda dá ${brl(Math.abs(simProfit))} de prejuízo. O limite é ${brl(Math.max(0, simBreakevenCpa))} por venda.`}
+              </p>
+
+              <p className="mt-3 text-[11px] text-slate-500">
+                Versão simplificada. Na plataforma, a calculadora inclui frete, embalagem, ICMS, checkout, reserva e regras de cada canal.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Canais */}
+        <div className="relative border-y border-white/5 bg-white/[0.02]">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-10">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Regras prontas para</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2">
+              {channels.map((c) => (
+                <span key={c} className="text-base font-bold text-slate-300">{c}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Problema */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+        <div className="max-w-2xl mb-12">
+          <p className="text-sm font-semibold text-rose-300 mb-3">O problema</p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+            Faturar alto não significa lucrar.
+          </h2>
+          <p className="mt-4 text-lg text-slate-400">
+            A maioria das lojas descobre o prejuízo só no fim do mês. Estes são os vazamentos mais comuns:
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-5">
+          {pains.map((p) => (
+            <div key={p.title} className="rounded-3xl border border-white/5 bg-slate-900/40 p-7">
+              <div className="w-11 h-11 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center mb-5">
+                <p.icon size={22} />
+              </div>
+              <h3 className="text-lg font-bold text-white">{p.title}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-slate-400">{p.text}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-12 border-t border-slate-900 bg-slate-950 text-slate-500 text-xs">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-xs">
-              G
-            </div>
-            <span className="font-bold text-slate-400">GERENCIIE PRO © 2026</span>
+      {/* Recursos */}
+      <section id="recursos" className="scroll-mt-20 bg-slate-900/30 border-y border-white/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <p className="text-sm font-semibold text-blue-300 mb-3">A solução</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              Tudo o que você precisa para dominar seus números
+            </h2>
+            <p className="mt-4 text-lg text-slate-400">
+              Feito para a realidade de taxas, impostos e tráfego pago de quem vende online no Brasil.
+            </p>
           </div>
 
-          <div className="flex items-center gap-6 text-[11px] font-bold">
-            <button onClick={() => openAuthModal('login')} className="hover:text-slate-300 transition-colors cursor-pointer">Entrar na Conta</button>
-            <button onClick={() => openAuthModal('register')} className="hover:text-slate-300 transition-colors cursor-pointer">Criar Cadastro</button>
+          <div className="grid lg:grid-cols-3 gap-5">
+            {pillars.map((p) => {
+              const c = pillarColors[p.color];
+              return (
+                <div key={p.tag} className="rounded-3xl border border-white/5 bg-slate-950/60 p-7 flex flex-col">
+                  <div className="flex items-center justify-between mb-6">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${c.badge}`}>{p.tag}</span>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.icon}`}>
+                      <p.icon size={22} />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{p.title}</h3>
+                  <ul className="mt-5 space-y-3">
+                    {p.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2.5 text-[15px] text-slate-300 leading-snug">
+                        <Check size={17} className={`shrink-0 mt-0.5 ${c.check}`} />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-10">
+            <p className="text-center text-sm font-medium text-slate-500 mb-5">E ainda:</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {extras.map((e) => (
+                <div key={e.label} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-slate-950/40 px-4 py-3.5">
+                  <e.icon size={18} className="text-slate-400 shrink-0" />
+                  <span className="text-sm font-medium text-slate-300">{e.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Agentes de IA */}
+      <section id="ia" className="scroll-mt-20 max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24 grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <p className="text-sm font-semibold text-indigo-300 mb-3">Agentes de IA</p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+            Pergunte como falaria com seu financeiro.
+          </h2>
+          <p className="mt-4 text-lg text-slate-400 leading-relaxed">
+            O Agente CFO enxerga seu produto, suas campanhas e seu caixa ao mesmo tempo. Pergunte se dá para subir o investimento em anúncios, como montar um kit ou onde está o vazamento.
+          </p>
+          <ul className="mt-7 space-y-4">
+            <li className="flex gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-300 flex items-center justify-center shrink-0"><Bot size={20} /></div>
+              <div>
+                <p className="font-bold text-white">Agente CFO</p>
+                <p className="text-[15px] text-slate-400">Análises de margem, tráfego, escala e saúde do caixa.</p>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-300 flex items-center justify-center shrink-0"><MessageCircle size={20} /></div>
+              <div>
+                <p className="font-bold text-white">Agente financeiro estilo WhatsApp</p>
+                <p className="text-[15px] text-slate-400">Escreva "gastei 50 no mercado" e a despesa é lançada na conta certa.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        {/* Exemplo de conversa */}
+        <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 sm:p-6 shadow-2xl">
+          <div className="flex items-center gap-3 pb-4 border-b border-white/5">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center"><Bot size={18} /></div>
+            <div>
+              <p className="text-sm font-bold">Gerenciie CFO</p>
+              <p className="text-xs text-slate-500">Exemplo de conversa</p>
+            </div>
+          </div>
+          <div className="pt-5 space-y-3 text-[15px]">
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-md bg-blue-600 px-4 py-2.5">
+              Posso subir R$ 500 por dia no Facebook Ads?
+            </div>
+            <div className="max-w-[90%] rounded-2xl rounded-tl-md bg-slate-800 px-4 py-3 text-slate-200 leading-relaxed">
+              Seu CPA máximo hoje é R$ 62,38 e o CPA atual está em R$ 41,00. Há folga, mas suba aos poucos: 20% a cada 2 dias, mantendo o CPA abaixo de R$ 50 para preservar 10% de margem.
+            </div>
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-md bg-blue-600 px-4 py-2.5">
+              E o caixa aguenta?
+            </div>
+            <div className="max-w-[90%] rounded-2xl rounded-tl-md bg-slate-800 px-4 py-3 text-slate-200 leading-relaxed">
+              Com o saldo atual, você cobre 9 dias desse investimento antes do repasse do gateway. Recomendo reservar o pagamento do fornecedor primeiro.
+            </div>
+          </div>
+          <p className="mt-4 text-[11px] text-slate-500">Valores ilustrativos. As respostas usam os dados da sua conta.</p>
+        </div>
+      </section>
+
+      {/* Como funciona */}
+      <section id="como-funciona" className="scroll-mt-20 bg-slate-900/30 border-y border-white/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <p className="text-sm font-semibold text-emerald-300 mb-3">Como funciona</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Do cadastro à decisão em minutos</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-5">
+            {steps.map((s) => (
+              <div key={s.n} className="rounded-3xl border border-white/5 bg-slate-950/60 p-7">
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-extrabold mb-5">{s.n}</div>
+                <h3 className="text-lg font-bold">{s.title}</h3>
+                <p className="mt-2 text-[15px] text-slate-400 leading-relaxed">{s.text}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-white/5 bg-slate-950/60 p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+              <Lock size={22} />
+            </div>
+            <div>
+              <p className="font-bold">Seus dados são só seus</p>
+              <p className="text-[15px] text-slate-400">Cada conta acessa apenas as próprias informações, com login protegido por e-mail ou Google.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Planos */}
+      <section id="planos" className="scroll-mt-20 max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <p className="text-sm font-semibold text-blue-300 mb-3">Planos</p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Comece grátis. Evolua quando a operação crescer.</h2>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-5 items-stretch">
+          {/* Free */}
+          <div className="rounded-3xl border border-white/10 bg-slate-900/40 p-7 flex flex-col">
+            <h3 className="text-lg font-bold">Free Starter</h3>
+            <p className="text-sm text-slate-400 mt-1">Para validar produtos e preços.</p>
+            <div className="mt-6 flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold">R$ 0</span>
+              <span className="text-sm text-slate-400">/mês</span>
+            </div>
+            <ul className="mt-7 space-y-3 text-[15px] text-slate-300 flex-1">
+              {['Calculadora de precificação completa', 'CPA Breakeven e margem líquida', 'Várias moedas (BRL, USD, EUR e outras)'].map((i) => (
+                <li key={i} className="flex items-start gap-2.5"><Check size={17} className="text-emerald-400 shrink-0 mt-0.5" />{i}</li>
+              ))}
+            </ul>
+            <button
+              onClick={goToApp}
+              className="mt-8 w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-bold text-sm transition-colors cursor-pointer"
+            >
+              Criar conta grátis
+            </button>
+          </div>
+
+          {/* Pro */}
+          <div className="relative rounded-3xl border-2 border-blue-500 bg-gradient-to-b from-blue-950/60 to-slate-900/60 p-7 flex flex-col shadow-2xl shadow-blue-600/10">
+            <span className="absolute -top-3 left-7 bg-blue-600 text-xs font-bold px-3 py-1 rounded-full">Mais escolhido</span>
+            <h3 className="text-lg font-bold">Pro CFO Unlimited</h3>
+            <p className="text-sm text-slate-400 mt-1">Para quem já investe em tráfego.</p>
+            <div className="mt-6 flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold">R$ 49</span>
+              <span className="text-sm text-slate-400">/mês</span>
+            </div>
+            <ul className="mt-7 space-y-3 text-[15px] text-slate-200 flex-1">
+              {['Tudo do plano Free', 'Dados salvos na nuvem', 'Planejamento de tráfego e simulação de escala', 'DRE financeiro e relatórios', 'Agentes de IA (CFO e WhatsApp)'].map((i) => (
+                <li key={i} className="flex items-start gap-2.5"><Check size={17} className="text-blue-400 shrink-0 mt-0.5" />{i}</li>
+              ))}
+            </ul>
+            <button
+              onClick={goToApp}
+              className="mt-8 w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-sm shadow-lg shadow-blue-600/25 transition-colors cursor-pointer"
+            >
+              Quero o Pro
+            </button>
+          </div>
+
+          {/* Enterprise */}
+          <div className="rounded-3xl border border-white/10 bg-slate-900/40 p-7 flex flex-col">
+            <h3 className="text-lg font-bold">Enterprise VIP</h3>
+            <p className="text-sm text-slate-400 mt-1">Para agências e grandes operações.</p>
+            <div className="mt-6 flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold">R$ 149</span>
+              <span className="text-sm text-slate-400">/mês</span>
+            </div>
+            <ul className="mt-7 space-y-3 text-[15px] text-slate-300 flex-1">
+              {['Tudo do plano Pro', 'Multi-usuários e equipe', 'Múltiplas lojas e canais', 'Suporte prioritário com especialista'].map((i) => (
+                <li key={i} className="flex items-start gap-2.5"><Check size={17} className="text-emerald-400 shrink-0 mt-0.5" />{i}</li>
+              ))}
+            </ul>
+            <button
+              onClick={goToApp}
+              className="mt-8 w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-bold text-sm transition-colors cursor-pointer"
+            >
+              Falar com consultor
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="scroll-mt-20 bg-slate-900/30 border-y border-white/5">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-center mb-10">Perguntas frequentes</h2>
+          <div className="divide-y divide-white/5 rounded-3xl border border-white/5 bg-slate-950/60 overflow-hidden">
+            {faqs.map((faq, idx) => (
+              <div key={idx}>
+                <button
+                  type="button"
+                  onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                  aria-expanded={openFaq === idx}
+                  className="w-full px-6 py-5 text-left flex items-center justify-between gap-4 font-semibold text-base text-white hover:bg-white/[0.02] transition-colors cursor-pointer"
+                >
+                  <span>{faq.q}</span>
+                  <ChevronDown size={20} className={`shrink-0 text-slate-400 transition-transform ${openFaq === idx ? 'rotate-180' : ''}`} />
+                </button>
+                {openFaq === idx && (
+                  <p className="px-6 pb-5 -mt-1 text-[15px] text-slate-400 leading-relaxed">{faq.a}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA final */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-24">
+        <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-blue-600 to-indigo-700 px-6 py-14 sm:px-14 text-center">
+          <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+          <h2 className="relative text-3xl sm:text-4xl font-extrabold tracking-tight">Descubra hoje quanto você lucra de verdade.</h2>
+          <p className="relative mt-4 text-lg text-blue-100 max-w-xl mx-auto">
+            Crie sua conta grátis e calcule o lucro real do seu primeiro produto em poucos minutos.
+          </p>
+          <div className="relative mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={goToApp}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-white text-blue-700 hover:bg-blue-50 font-bold text-base flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              {currentUser ? 'Abrir meu painel' : 'Criar conta grátis'}
+              <ArrowRight size={18} />
+            </button>
+            {!currentUser && (
+              <button
+                onClick={() => openAuthModal('login')}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl border border-white/30 hover:bg-white/10 font-semibold text-base transition-colors cursor-pointer"
+              >
+                Já tenho conta
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-white/5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-5 text-sm text-slate-500">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-extrabold text-xs">G</div>
+            <span className="font-semibold text-slate-400">Gerenciie Pro © {new Date().getFullYear()}</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-6">
+            {navLinks.map((l) => (
+              <a key={l.href} href={l.href} className="hover:text-slate-300 transition-colors">{l.label}</a>
+            ))}
+            {!currentUser && (
+              <button onClick={() => openAuthModal('login')} className="hover:text-slate-300 transition-colors cursor-pointer">Entrar</button>
+            )}
           </div>
         </div>
       </footer>
