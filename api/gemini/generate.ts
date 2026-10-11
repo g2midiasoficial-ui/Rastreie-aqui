@@ -1,5 +1,5 @@
 // Função serverless da Vercel: POST /api/gemini/generate
-import { handleGeminiRequest, readProxyEnv } from '../../server/geminiProxy';
+import { handleGeminiRequest, readProxyEnv } from '../../server/geminiProxy.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
