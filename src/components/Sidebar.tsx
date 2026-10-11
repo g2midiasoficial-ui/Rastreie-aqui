@@ -98,9 +98,7 @@ export function Sidebar({
       {/* Brand Header */}
       <div className="p-6 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <Globe size={20} />
-          </div>
+          <img src="/logo-192.png" alt="" className="w-9 h-9 rounded-2xl shadow-md shadow-blue-500/20" />
           <div>
             <h1 className="font-black text-lg tracking-tighter text-slate-900 leading-none">
               Gerenciie

@@ -104,9 +104,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
 
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-xs">
-              <Globe size={20} />
-            </div>
+            <img src="/logo-192.png" alt="" className="w-10 h-10 rounded-xl border border-white/20 shadow-xs" />
             <div>
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-200 block">
                 Gerenciie Pro • Autenticação
