@@ -239,7 +239,7 @@ ${transactions.slice(0, 10).map(t => `  • [${t.date || 'Data'}] ${t.type === '
 }
 
 /** Chama o proxy do servidor enviando o token de login (a chave do Gemini fica no servidor). */
-async function callGeminiProxy(body: Record<string, any>): Promise<{ ok: boolean; status: number; data: any }> {
+export async function callGeminiProxy(body: Record<string, any>): Promise<{ ok: boolean; status: number; data: any }> {
   const { data: { session } } = await supabase.auth.getSession();
   const resFetch = await fetch('/api/gemini/generate', {
     method: 'POST',

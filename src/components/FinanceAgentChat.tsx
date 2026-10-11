@@ -18,6 +18,7 @@ import {
   ArrowDownRight,
   Wallet
 } from 'lucide-react';
+import { callGeminiProxy } from '../../services/geminiService.ts';
 import { Account, FinancialMode, Transaction } from '../types/finance';
 
 interface Message {
@@ -108,23 +109,17 @@ JSON>>>
 Se for apenas uma dúvida ou conversa, "hasTransaction": false.`;
 
     try {
-      const res = await fetch('/api/gemini/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: text || 'Analise este comprovante/recibo e registre a despesa.',
-          systemInstruction: systemPrompt,
-          model: 'gemini-3.6-flash',
-          temperature: 0.2
-        })
+      const { ok, data } = await callGeminiProxy({
+        prompt: text || 'Analise este comprovante/recibo e registre a despesa.',
+        systemInstruction: systemPrompt,
+        model: 'gemini-3.6-flash',
+        temperature: 0.2
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.text) {
-          return data.text;
-        }
+      if (ok && data?.text) {
+        return data.text;
       }
+      if (data?.error) console.warn('Gemini proxy (chat):', data.error);
     } catch (err) {
       console.warn('Backend Gemini API notice in chat, using heuristic fallback:', err);
     }

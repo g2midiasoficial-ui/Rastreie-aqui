@@ -3,7 +3,7 @@
 // A chave do Gemini fica só no servidor; só usuários logados no Supabase podem chamar.
 
 const DEFAULT_MODELS = ['gemini-3.6-flash', 'gemini-3.7-flash'];
-const MAX_PROMPT_CHARS = 60_000;
+const MAX_PROMPT_CHARS = 400_000;
 
 export interface ProxyEnv {
   geminiApiKey?: string;
