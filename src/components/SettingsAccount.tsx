@@ -5,16 +5,14 @@ import {
   RefreshCw, Save, KeyRound, Globe, Smartphone, Bell, HelpCircle,
   Activity, Check, Server, Cpu, Wifi, ArrowRight
 } from 'lucide-react';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
-  signOut
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase.ts';
+import { supabase } from '../lib/supabase.ts';
+import {
+  AuthMessageError,
+  authenticateWithEmail,
+  saveUserSession,
+  signInWithGoogle,
+  signOutUser
+} from '../lib/auth.ts';
 import { PricingData, CurrencyCode, TaxRegime } from '../../types.ts';
 import { formatCurrency, getCurrencySymbol } from '../../utils/calculations.ts';
 import { testGeminiConnection } from '../../services/geminiService.ts';
@@ -54,7 +52,6 @@ export function SettingsAccount({
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
-  const [popupBlockedFallback, setPopupBlockedFallback] = useState(false);
 
   // Settings Feedback
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -64,115 +61,19 @@ export function SettingsAccount({
     running: false,
     lastChecked: null,
     auth: { status: 'idle', latencyMs: 0, message: 'Pronto para teste de autenticação' },
-    firestore: { status: 'idle', latencyMs: 0, message: 'Pronto para ping no Firestore' },
+    firestore: { status: 'idle', latencyMs: 0, message: 'Pronto para ping no banco Supabase' },
     gemini: { status: 'idle', latencyMs: 0, message: 'Pronto para teste do Gemini 3.8 Flash', model: 'gemini-3.8-flash' }
   });
-
-  const saveUserSession = (userObj: any) => {
-    try {
-      localStorage.setItem('gerenciie_user_session', JSON.stringify(userObj));
-    } catch (e) {
-      console.warn('Local storage write error:', e);
-    }
-  };
-
-  const handleDirectGoogleConnect = async (customEmail?: string, customName?: string) => {
-    setLoading(true);
-    setAuthError(null);
-    setPopupBlockedFallback(false);
-
-    const emailToUse = customEmail?.trim() || authEmail.trim() || 'g2midiasoficial@gmail.com';
-    const nameToUse = customName?.trim() || authName.trim() || emailToUse.split('@')[0];
-    const generatedUid = 'google_' + btoa(emailToUse).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-
-    const userPayload = {
-      uid: generatedUid,
-      displayName: nameToUse,
-      email: emailToUse,
-      photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameToUse)}&backgroundColor=0284c7,3b82f6`,
-      provider: 'google'
-    };
-
-    try {
-      await setDoc(doc(db, 'users', generatedUid), {
-        uid: generatedUid,
-        email: emailToUse,
-        displayName: nameToUse,
-        photoURL: userPayload.photoURL,
-        provider: 'google',
-        connectedAt: serverTimestamp(),
-        lastLogin: serverTimestamp()
-      }, { merge: true });
-    } catch (err) {
-      console.warn('Firestore write warning:', err);
-    }
-
-    saveUserSession(userPayload);
-    setCurrentUser(userPayload);
-    setAuthSuccess(`Conta Google (${emailToUse}) conectada e sincronizada com sucesso!`);
-    setLoading(false);
-    runFullDiagnostics();
-  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setAuthError(null);
     setAuthSuccess(null);
-    setPopupBlockedFallback(false);
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      
-      const userPayload = {
-        uid: result.user.uid,
-        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Lojista Google',
-        email: result.user.email || '',
-        photoURL: result.user.photoURL || undefined,
-        provider: 'google'
-      };
-
-      // Persist user record in Firestore
-      try {
-        await setDoc(doc(db, 'users', result.user.uid), {
-          uid: result.user.uid,
-          email: result.user.email,
-          displayName: result.user.displayName || result.user.email?.split('@')[0],
-          photoURL: result.user.photoURL,
-          provider: 'google',
-          lastLogin: serverTimestamp()
-        }, { merge: true });
-      } catch (firestoreErr) {
-        console.warn('Firestore user profile sync notice:', firestoreErr);
-      }
-      
-      saveUserSession(userPayload);
-      setCurrentUser(userPayload);
-      setAuthSuccess(`Conta Google (${result.user.email}) conectada com sucesso!`);
-      runFullDiagnostics();
+      // Redireciona para o Google; a sessão é tratada pelo App ao voltar
+      await signInWithGoogle();
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      const isAbortOrClosed = 
-        err?.code === 'auth/popup-closed-by-user' || 
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.toLowerCase().includes('aborted') ||
-        err?.message?.toLowerCase().includes('user aborted') ||
-        err?.name === 'AbortError';
-
-      if (isAbortOrClosed) {
-        setAuthError('O processo de login com o Google foi cancelado pela janela pop-up.');
-      } else if (
-        err?.code === 'auth/popup-blocked' || 
-        err?.code === 'auth/unauthorized-domain' ||
-        err?.message?.includes('popup')
-      ) {
-        // Automatically activate direct connection without popup obstruction
-        setPopupBlockedFallback(true);
-        setAuthError('O pop-up de login foi bloqueado pelas políticas de iframe do navegador.');
-      } else {
-        setAuthError(`Não foi possível conectar com o Google: ${err?.message || 'Verifique sua conexão.'}`);
-      }
-    } finally {
+      setAuthError(err?.message || 'Não foi possível conectar com o Google.');
       setLoading(false);
     }
   };
@@ -183,120 +84,35 @@ export function SettingsAccount({
     setAuthError(null);
     setAuthSuccess(null);
 
-    const cleanEmail = authEmail.trim();
-    const cleanPassword = authPassword.trim();
-
-    if (!cleanEmail || !cleanPassword) {
-      setAuthError('Por favor, informe seu e-mail e senha.');
-      setLoading(false);
-      return;
-    }
-
-    if (cleanPassword.length < 6) {
-      setAuthError('A senha deve conter no mínimo 6 caracteres.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      if (authMode === 'register') {
-        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-        const userRecord = userCred.user;
-        
-        if (authName.trim()) {
-          try {
-            await updateProfile(userRecord, { displayName: authName.trim() });
-          } catch (profileErr) {
-            console.warn('Profile update notice:', profileErr);
-          }
-        }
-
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: authName.trim() || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          provider: 'password'
-        };
-
-        // Salvar na coleção users do Firestore
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: authName.trim() || cleanEmail.split('@')[0],
-            provider: 'password',
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (firestoreErr) {
-          console.warn('Firestore user profile sync notice:', firestoreErr);
-        }
-
-        saveUserSession(userPayload);
-        setCurrentUser(userPayload);
-        setAuthSuccess(`Conta criada com sucesso! Conectado como ${userPayload.displayName}.`);
-        setAuthEmail('');
+      const result = await authenticateWithEmail(authMode, authEmail, authPassword, authName);
+      if (result.status === 'confirm_email') {
+        setAuthSuccess('Conta criada! Enviamos um link de confirmação para o seu e-mail. Confirme e depois faça login.');
+        setAuthMode('login');
         setAuthPassword('');
-        setAuthName('');
-        runFullDiagnostics();
-      } else {
-        const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-        const userRecord = userCred.user;
-
-        const userPayload = {
-          uid: userRecord.uid,
-          displayName: userRecord.displayName || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          photoURL: userRecord.photoURL || undefined,
-          provider: 'password'
-        };
-
-        try {
-          await setDoc(doc(db, 'users', userRecord.uid), {
-            uid: userRecord.uid,
-            email: cleanEmail,
-            displayName: userRecord.displayName || cleanEmail.split('@')[0],
-            lastLogin: serverTimestamp()
-          }, { merge: true });
-        } catch (firestoreErr) {
-          console.warn('Firestore user profile sync notice:', firestoreErr);
-        }
-
-        saveUserSession(userPayload);
-        setCurrentUser(userPayload);
-        setAuthSuccess(`Login efetuado com sucesso! Bem-vindo, ${userPayload.displayName}.`);
-        setAuthEmail('');
-        setAuthPassword('');
-        runFullDiagnostics();
+        return;
       }
+      saveUserSession(result.user);
+      setCurrentUser(result.user);
+      setAuthSuccess(
+        authMode === 'register'
+          ? `Conta criada com sucesso! Conectado como ${result.user.displayName}.`
+          : `Login efetuado com sucesso! Bem-vindo, ${result.user.displayName}.`
+      );
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthName('');
+      runFullDiagnostics();
     } catch (err: any) {
-      console.error('Firebase Auth Error:', err);
-      let message = 'Erro ao realizar autenticação.';
-      if (err.code === 'auth/invalid-email') {
-        message = 'O formato do e-mail inserido é inválido.';
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        message = 'E-mail ou senha incorretos. Se ainda não possui cadastro, clique em "Criar Conta".';
-      } else if (err.code === 'auth/email-already-in-use') {
-        message = 'Este e-mail já está cadastrado. Alterne para a aba "Entrar (Login)".';
-      } else if (err.code === 'auth/weak-password') {
-        message = 'A senha informada é fraca. Utilize pelo menos 6 caracteres.';
-      } else if (err.message) {
-        message = err.message;
-      }
-      setAuthError(message);
+      console.error('Supabase Auth Error:', err);
+      setAuthError(err instanceof AuthMessageError ? err.message : 'Erro ao realizar autenticação.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.warn('Logout notice:', err);
-    }
-    localStorage.removeItem('gerenciie_user_session');
-    localStorage.removeItem('gerenciie_admin_unlocked');
+    await signOutUser();
     setCurrentUser(null);
     setAuthSuccess('Você saiu da sua conta.');
     if (onLogout) {
@@ -307,19 +123,22 @@ export function SettingsAccount({
   const runFullDiagnostics = async () => {
     setDiagnostic(prev => ({ ...prev, running: true }));
 
-    // 1. Check Firebase Auth State
+    // 1. Check Supabase Auth State
     const authStart = performance.now();
     let authRes: DiagnosticState['auth'];
-    const activeAuthUser = auth.currentUser;
+    const { data: { session } } = await supabase.auth.getSession();
+    const activeAuthUser = session?.user;
     const authLatency = Math.round(performance.now() - authStart);
 
     if (activeAuthUser || currentUser) {
       const email = activeAuthUser?.email || currentUser?.email || 'Autenticado';
-      const uid = activeAuthUser?.uid || currentUser?.uid || '';
+      const uid = activeAuthUser?.id || currentUser?.uid || '';
       authRes = {
-        status: 'success',
+        status: activeAuthUser ? 'success' : 'warning',
         latencyMs: authLatency,
-        message: `Sessão ativa: ${email} (UID: ${uid.substring(0, 8)}...)`
+        message: activeAuthUser
+          ? `Sessão ativa: ${email} (UID: ${uid.substring(0, 8)}...)`
+          : `Modo visitante (${email}). Os dados ficam apenas neste navegador.`
       };
     } else {
       authRes = {
@@ -329,38 +148,24 @@ export function SettingsAccount({
       };
     }
 
-    // 2. Test Firestore Database Live Ping
+    // 2. Test Supabase Database Live Ping
     const firestoreStart = performance.now();
     let firestoreRes: DiagnosticState['firestore'];
     try {
-      const pingDocRef = doc(db, 'system_diagnostics', 'ping_test');
-      await setDoc(pingDocRef, {
-        lastPing: serverTimestamp(),
-        checkedBy: currentUser?.uid || 'guest_client',
-        status: 'healthy'
-      }, { merge: true });
-      const snap = await getDoc(pingDocRef);
+      const { error } = await supabase.from('profiles').select('id', { head: true, count: 'exact' });
       const latencyMs = Math.round(performance.now() - firestoreStart);
-      
-      if (snap.exists()) {
-        firestoreRes = {
-          status: 'success',
-          latencyMs,
-          message: `Firestore Cloud respondendo perfeitamente (${latencyMs}ms).`
-        };
-      } else {
-        firestoreRes = {
-          status: 'warning',
-          latencyMs,
-          message: 'Banco conectado, mas documento de teste não retornado.'
-        };
-      }
+      if (error) throw error;
+      firestoreRes = {
+        status: 'success',
+        latencyMs,
+        message: `Banco de dados Supabase respondendo perfeitamente (${latencyMs}ms).`
+      };
     } catch (err: any) {
       const latencyMs = Math.round(performance.now() - firestoreStart);
       firestoreRes = {
         status: 'error',
         latencyMs,
-        message: `Falha ao pingar Firestore: ${err?.message || 'Erro de rede'}`
+        message: `Falha ao acessar o banco Supabase: ${err?.message || 'Erro de rede'}`
       };
     }
 
@@ -482,7 +287,7 @@ export function SettingsAccount({
                     <p className="text-xs font-bold text-slate-500 truncate">{currentUser.email}</p>
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md">
-                        {currentUser.provider === 'google' ? 'Google Auth (Oficial)' : 'Firebase Auth (E-mail)'}
+                        {currentUser.provider === 'google' ? 'Google Auth (Oficial)' : 'Supabase Auth (E-mail)'}
                       </span>
                       <span className="text-[9px] font-bold text-slate-400 truncate">UID: {currentUser.uid}</span>
                     </div>
@@ -494,7 +299,7 @@ export function SettingsAccount({
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Produtos Salvos</p>
                     <p className="text-2xl font-black text-slate-900">{savedProductsCount}</p>
                     <p className="text-[9px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
-                      <Database size={10} /> Sincronizados no Firestore
+                      <Database size={10} /> Sincronizados no Supabase
                     </p>
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -509,7 +314,7 @@ export function SettingsAccount({
                 <div className="p-4 bg-emerald-50/70 border border-emerald-100 rounded-2xl flex items-center gap-3">
                   <ShieldCheck size={20} className="text-emerald-600 shrink-0" />
                   <p className="text-xs text-emerald-800 font-medium">
-                    Sua conta está conectada e vinculada ao banco de dados do Google Cloud Firestore. Todas as alterações são salvas automaticamente.
+                    Sua conta está conectada e vinculada ao banco de dados Supabase. Todas as alterações são salvas automaticamente.
                   </p>
                 </div>
 
@@ -530,29 +335,6 @@ export function SettingsAccount({
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-700 text-xs font-bold">
                     <AlertCircle size={16} className="shrink-0 text-rose-600" />
                     <span>{authError}</span>
-                  </div>
-                )}
-
-                {popupBlockedFallback && (
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-3 animate-in fade-in">
-                    <div className="flex items-start gap-2.5">
-                      <Sparkles size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-xs font-black text-blue-950">Conexão Google Direta (Sem Pop-up)</h4>
-                        <p className="text-[11px] text-blue-800 mt-0.5">
-                          Como a janela pop-up foi retida pelo navegador, conecte sua conta Google oficial com 1 clique:
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDirectGoogleConnect('g2midiasoficial@gmail.com', 'G2 Mídias Oficial')}
-                      disabled={loading}
-                      className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-                    >
-                      <Check size={14} />
-                      <span>Conectar g2midiasoficial@gmail.com Agora</span>
-                    </button>
                   </div>
                 )}
 
@@ -577,18 +359,9 @@ export function SettingsAccount({
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                     </svg>
-                    <span>{loading ? 'Conectando ao Google...' : 'Entrar com Janela Pop-up do Google'}</span>
+                    <span>{loading ? 'Conectando ao Google...' : 'Entrar com Google'}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDirectGoogleConnect('g2midiasoficial@gmail.com', 'G2 Mídias Oficial')}
-                    disabled={loading}
-                    className="w-full py-2.5 px-4 bg-blue-50/70 hover:bg-blue-100/80 border border-blue-200/80 text-blue-900 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                  >
-                    <Sparkles size={14} className="text-blue-600" />
-                    <span>⚡ Conexão Direta: g2midiasoficial@gmail.com (Sem Pop-up)</span>
-                  </button>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -696,7 +469,7 @@ export function SettingsAccount({
             </div>
 
             <div className="space-y-3">
-              {/* Item 1: Firebase Auth */}
+              {/* Item 1: Supabase Auth */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
@@ -706,7 +479,7 @@ export function SettingsAccount({
                     <User size={14} />
                   </div>
                   <div>
-                    <p className="text-xs font-black text-slate-900">Firebase Authentication</p>
+                    <p className="text-xs font-black text-slate-900">Supabase Authentication</p>
                     <p className="text-[10px] text-slate-500 font-medium">{diagnostic.auth.message}</p>
                   </div>
                 </div>
@@ -718,7 +491,7 @@ export function SettingsAccount({
                 </span>
               </div>
 
-              {/* Item 2: Firestore Database */}
+              {/* Item 2: Supabase Database */}
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
@@ -728,7 +501,7 @@ export function SettingsAccount({
                     <Database size={14} />
                   </div>
                   <div>
-                    <p className="text-xs font-black text-slate-900">Firestore Cloud Database</p>
+                    <p className="text-xs font-black text-slate-900">Banco de Dados Supabase</p>
                     <p className="text-[10px] text-slate-500 font-medium">{diagnostic.firestore.message}</p>
                     <p className="text-[9px] text-slate-400 font-mono mt-0.5">DB: ai-studio-d584075f-0a72-4c80-9843-378c0ca75fb2</p>
                   </div>

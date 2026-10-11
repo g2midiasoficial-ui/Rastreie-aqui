@@ -7,18 +7,8 @@ import {
   Lock, AlertTriangle, ChevronRight, Check, LogIn, LogOut,
   UserCheck, KeyRound, ArrowLeft, Mail
 } from 'lucide-react';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  updateDoc, 
-  deleteDoc, 
-  addDoc, 
-  setDoc, 
-  serverTimestamp 
-} from 'firebase/firestore';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../lib/firebase.ts';
+import { supabase } from '../lib/supabase.ts';
+import { AuthMessageError, authenticateWithEmail, saveUserSession } from '../lib/auth.ts';
 
 interface AdminUser {
   id: string;
@@ -42,16 +32,6 @@ interface AdminDashboardProps {
   onOpenAuthModal?: () => void;
   onLogout?: () => void;
 }
-
-// Authorized Admin Emails
-export const ADMIN_EMAILS = [
-  'Betosouza3322@gmail.com'
-];
-
-export const checkIsAdminEmail = (email?: string | null): boolean => {
-  if (!email) return false;
-  return email.trim().toLowerCase() === 'betosouza3322@gmail.com';
-};
 
 export function AdminDashboard({
   currentUser,
@@ -91,118 +71,42 @@ export function AdminDashboard({
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Subscribe to Users collection
-  useEffect(() => {
-    try {
-      const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-        const userList: AdminUser[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const emailVal = data.email || 'sem-email@gerenciie.com';
-          const isAdmin = data.role === 'admin' || checkIsAdminEmail(emailVal);
-          userList.push({
-            id: docSnap.id,
-            uid: data.uid || docSnap.id,
-            email: emailVal,
-            displayName: data.displayName || data.name || 'Usuário',
-            role: isAdmin ? 'admin' : 'user',
-            plan: data.plan || (isAdmin ? 'lifetime' : 'pro_annual'),
-            status: data.status || 'active',
-            provider: data.provider || 'google',
-            createdAt: data.createdAt || data.connectedAt || new Date().toISOString(),
-            lastLogin: data.lastLogin || new Date().toISOString(),
-            mrr: data.plan === 'lifetime' || isAdmin ? 0 : data.plan === 'pro_annual' ? 69 : data.plan === 'pro_monthly' ? 97 : 0
-          });
-        });
+  const isAdmin = currentUser?.role === 'admin' && !currentUser?.isGuest;
 
-        // If no users in Firestore yet, seed with current user and sample records
-        if (userList.length === 0) {
-          const defaultList: AdminUser[] = [
-            {
-              id: 'admin_beto',
-              uid: 'admin_beto_3322',
-              email: 'Betosouza3322@gmail.com',
-              displayName: 'Beto Souza (Admin Master)',
-              role: 'admin',
-              plan: 'lifetime',
-              status: 'active',
-              provider: 'google',
-              createdAt: new Date().toISOString(),
-              mrr: 0
-            },
-            {
-              id: 'admin_master',
-              uid: currentUser?.uid || 'admin_master',
-              email: currentUser?.email || 'g2midiasoficial@gmail.com',
-              displayName: currentUser?.displayName || 'G2 Mídias (Admin)',
-              role: 'admin',
-              plan: 'lifetime',
-              status: 'active',
-              provider: 'google',
-              createdAt: new Date().toISOString(),
-              mrr: 0
-            },
-            {
-              id: 'user_1',
-              email: 'carlos.ecom@gmail.com',
-              displayName: 'Carlos Vendas E-com',
-              role: 'user',
-              plan: 'pro_annual',
-              status: 'active',
-              provider: 'google',
-              createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-              mrr: 69
-            },
-            {
-              id: 'user_2',
-              email: 'mariana.drop@hotmail.com',
-              displayName: 'Mariana Dropshipping',
-              role: 'user',
-              plan: 'pro_monthly',
-              status: 'active',
-              provider: 'google',
-              createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-              mrr: 97
-            },
-            {
-              id: 'user_3',
-              email: 'rafael.scale@outlook.com',
-              displayName: 'Rafael Gestor de Tráfego',
-              role: 'user',
-              plan: 'lifetime',
-              status: 'active',
-              provider: 'google',
-              createdAt: new Date(Date.now() - 86400000 * 12).toISOString(),
-              mrr: 0
-            },
-            {
-              id: 'user_4',
-              email: 'loja.premium@gmail.com',
-              displayName: 'Loja Premium Multicanal',
-              role: 'user',
-              plan: 'pro_annual',
-              status: 'pending',
-              provider: 'email',
-              createdAt: new Date(Date.now() - 86400000 * 20).toISOString(),
-              mrr: 69
-            }
-          ];
-          setUsers(defaultList);
-        } else {
-          setUsers(userList);
-        }
-        setLoading(false);
-      }, (error) => {
-        console.warn('Firestore Users Listen Error:', error);
-        setLoading(false);
-      });
-
-      return () => unsubscribe();
-    } catch (err) {
-      console.warn(err);
+  // Carrega usuários pelo RPC admin_list_users (o banco confere se quem chama é admin)
+  const loadUsers = async () => {
+    const { data, error } = await supabase.rpc('admin_list_users');
+    if (error) {
+      console.warn('Erro ao carregar usuários:', error.message);
+      showToast('Não foi possível carregar os usuários.');
       setLoading(false);
+      return;
     }
-  }, [currentUser]);
+    setUsers((data || []).map((row: any) => ({
+      id: row.id,
+      uid: row.id,
+      email: row.email || 'sem-email',
+      displayName: row.display_name || row.email?.split('@')[0] || 'Usuário',
+      role: row.role === 'admin' ? 'admin' : 'user',
+      plan: row.plan || 'free',
+      status: row.status || 'active',
+      provider: row.provider || 'email',
+      createdAt: row.created_at,
+      lastLogin: row.last_sign_in_at,
+      mrr: row.plan === 'pro_annual' ? 69 : row.plan === 'pro_monthly' ? 97 : 0
+    })));
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    loadUsers();
+  }, [isAdmin, currentUser?.uid]);
 
   // Filtered Users
   const filteredUsers = users.filter((u) => {
@@ -221,146 +125,69 @@ export function AdminDashboard({
   const totalMrr = users.reduce((acc, u) => acc + (u.mrr || (u.plan === 'pro_annual' ? 69 : u.plan === 'pro_monthly' ? 97 : 0)), 0);
   const lifetimeSalesCount = users.filter(u => u.plan === 'lifetime').length;
 
+  const updateUser = async (
+    user: AdminUser,
+    changes: { display_name?: string; role?: string; plan?: string; status?: string },
+    successMsg: string
+  ) => {
+    const { error } = await supabase.rpc('admin_update_user', {
+      target_id: user.id,
+      new_display_name: changes.display_name ?? null,
+      new_role: changes.role ?? null,
+      new_plan: changes.plan ?? null,
+      new_status: changes.status ?? null
+    });
+    if (error) {
+      console.error(error);
+      showToast(`Erro: ${error.message}`);
+      return false;
+    }
+    showToast(successMsg);
+    await loadUsers();
+    return true;
+  };
+
   // Handle Save / Edit User
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userFormEmail.trim()) return;
-
-    try {
-      if (editingUser) {
-        // Update
-        const userRef = doc(db, 'users', editingUser.id);
-        await updateDoc(userRef, {
-          email: userFormEmail,
-          displayName: userFormName,
-          role: userFormRole,
-          plan: userFormPlan,
-          status: userFormStatus,
-          updatedAt: serverTimestamp()
-        });
-        showToast('Usuário atualizado com sucesso!');
-      } else {
-        // Create new
-        const newUid = 'manual_' + Date.now();
-        await setDoc(doc(db, 'users', newUid), {
-          uid: newUid,
-          email: userFormEmail,
-          displayName: userFormName || userFormEmail.split('@')[0],
-          role: userFormRole,
-          plan: userFormPlan,
-          status: userFormStatus,
-          provider: 'manual',
-          createdAt: serverTimestamp(),
-          lastLogin: serverTimestamp()
-        });
-        showToast('Novo usuário criado com sucesso!');
-      }
+    if (!editingUser) {
+      // Contas só podem ser criadas pelo próprio usuário (cadastro com e-mail ou Google)
+      showToast('Novos usuários precisam se cadastrar pela página de login.');
+      setIsUserModalOpen(false);
+      return;
+    }
+    const ok = await updateUser(editingUser, {
+      display_name: userFormName.trim() || undefined,
+      role: userFormRole,
+      plan: userFormPlan,
+      status: userFormStatus
+    }, 'Usuário atualizado com sucesso!');
+    if (ok) {
       setIsUserModalOpen(false);
       setEditingUser(null);
-    } catch (err: any) {
-      console.error(err);
-      // Fallback local update
-      if (editingUser) {
-        setUsers(users.map(u => u.id === editingUser.id ? {
-          ...u,
-          email: userFormEmail,
-          displayName: userFormName,
-          role: userFormRole,
-          plan: userFormPlan,
-          status: userFormStatus
-        } : u));
-        showToast('Usuário atualizado!');
-      } else {
-        const mockNew: AdminUser = {
-          id: 'user_' + Date.now(),
-          email: userFormEmail,
-          displayName: userFormName || userFormEmail.split('@')[0],
-          role: userFormRole,
-          plan: userFormPlan,
-          status: userFormStatus,
-          provider: 'manual',
-          createdAt: new Date().toISOString()
-        };
-        setUsers([mockNew, ...users]);
-        showToast('Usuário registrado!');
-      }
-      setIsUserModalOpen(false);
     }
   };
 
   const handleToggleStatus = async (user: AdminUser) => {
     const nextStatus = user.status === 'active' ? 'suspended' : 'active';
-    try {
-      await updateDoc(doc(db, 'users', user.id), {
-        status: nextStatus
-      });
-      showToast(`Status alterado para ${nextStatus === 'active' ? 'Ativo' : 'Suspenso'}`);
-    } catch {
-      setUsers(users.map(u => u.id === user.id ? { ...u, status: nextStatus } : u));
-      showToast(`Status atualizado!`);
-    }
+    await updateUser(user, { status: nextStatus }, `Status alterado para ${nextStatus === 'active' ? 'Ativo' : 'Suspenso'}`);
   };
 
   const handleToggleAdmin = async (user: AdminUser) => {
     const nextRole = user.role === 'admin' ? 'user' : 'admin';
-    try {
-      await updateDoc(doc(db, 'users', user.id), {
-        role: nextRole
-      });
-      showToast(`Papel alterado para ${nextRole === 'admin' ? 'Administrador' : 'Membro'}`);
-    } catch {
-      setUsers(users.map(u => u.id === user.id ? { ...u, role: nextRole } : u));
-      showToast(`Papel atualizado!`);
-    }
+    await updateUser(user, { role: nextRole }, `Papel alterado para ${nextRole === 'admin' ? 'Administrador' : 'Membro'}`);
   };
 
   const handleDeleteUser = async (user: AdminUser) => {
-    if (!window.confirm(`Deseja realmente remover o acesso de ${user.email}?`)) return;
-    try {
-      await deleteDoc(doc(db, 'users', user.id));
-      showToast('Usuário removido.');
-    } catch {
-      setUsers(users.filter(u => u.id !== user.id));
-      showToast('Usuário removido da lista.');
+    if (!window.confirm(`Deseja realmente excluir a conta de ${user.email}? Todos os dados dela serão apagados.`)) return;
+    const { error } = await supabase.rpc('admin_delete_user', { target_id: user.id });
+    if (error) {
+      console.error(error);
+      showToast(`Erro: ${error.message}`);
+      return;
     }
-  };
-
-  // Check Admin Access
-  const isEmailAdmin = checkIsAdminEmail(currentUser?.email) || currentUser?.role === 'admin';
-
-  // Handle Google Admin Login
-  const handleGoogleAdminLogin = async () => {
-    setAdminLoginLoading(true);
-    setAdminLoginError(null);
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, provider);
-      
-      const adminPayload = {
-        uid: result.user.uid,
-        displayName: result.user.displayName || (checkIsAdminEmail(result.user.email) ? 'Admin Master' : 'Usuário'),
-        email: result.user.email || 'Betosouza3322@gmail.com',
-        photoURL: result.user.photoURL,
-        role: 'admin',
-        plan: 'lifetime',
-        provider: 'google'
-      };
-
-      try {
-        localStorage.setItem('gerenciie_user_session', JSON.stringify(adminPayload));
-      } catch (e) {
-        console.warn(e);
-      }
-
-      if (onLoginSuccess) onLoginSuccess(adminPayload);
-      showToast('Acesso de Administrador confirmado via Google!');
-    } catch (err: any) {
-      console.warn('Google Auth popup warning:', err);
-      if (onOpenAuthModal) onOpenAuthModal();
-    } finally {
-      setAdminLoginLoading(false);
-    }
+    showToast('Usuário removido.');
+    await loadUsers();
   };
 
   // Handle Direct Email Admin Login
@@ -368,84 +195,23 @@ export function AdminDashboard({
     e.preventDefault();
     setAdminLoginLoading(true);
     setAdminLoginError(null);
-    const cleanEmail = adminEmail.trim();
-    const cleanPassword = adminPassword.trim();
 
-    if (!cleanEmail || !cleanPassword) {
-      setAdminLoginError('Por favor, informe seu e-mail e senha de administrador.');
-      setAdminLoginLoading(false);
-      return;
-    }
-
-    if (!checkIsAdminEmail(cleanEmail)) {
-      setAdminLoginError('Apenas o e-mail de administrador autorizado (Betosouza3322@gmail.com) tem permissão de acesso.');
-      setAdminLoginLoading(false);
-      return;
-    }
-
-    // Direct password verification for Beto54321@
-    if (cleanPassword === 'Beto54321@') {
-      const adminPayload = {
-        uid: 'admin_betosouza',
-        displayName: 'Beto Souza (Admin Master)',
-        email: 'Betosouza3322@gmail.com',
-        photoURL: 'https://api.dicebear.com/7.x/initials/svg?seed=Beto%20Souza&backgroundColor=f59e0b,d97706',
-        role: 'admin',
-        plan: 'lifetime',
-        provider: 'password'
-      };
-
-      try {
-        await setDoc(doc(db, 'users', 'admin_betosouza'), {
-          uid: 'admin_betosouza',
-          email: 'Betosouza3322@gmail.com',
-          displayName: 'Beto Souza (Admin Master)',
-          role: 'admin',
-          plan: 'lifetime',
-          lastLogin: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.warn('Firestore sync note:', err);
-      }
-
-      try {
-        localStorage.setItem('gerenciie_user_session', JSON.stringify(adminPayload));
-      } catch (e) {
-        console.warn(e);
-      }
-
-      if (onLoginSuccess) onLoginSuccess(adminPayload);
-      showToast('Acesso de Administrador confirmado!');
-      setAdminLoginLoading(false);
-      return;
-    }
-
-    // Try Firebase Authentication as fallback
     try {
-      const userCred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-      const userRecord = userCred.user;
-
-      const adminPayload = {
-        uid: userRecord.uid,
-        displayName: userRecord.displayName || 'Beto Souza (Admin Master)',
-        email: 'Betosouza3322@gmail.com',
-        photoURL: userRecord.photoURL,
-        role: 'admin',
-        plan: 'lifetime',
-        provider: 'password'
-      };
-
-      try {
-        localStorage.setItem('gerenciie_user_session', JSON.stringify(adminPayload));
-      } catch (e) {
-        console.warn(e);
+      const result = await authenticateWithEmail('login', adminEmail, adminPassword);
+      if (result.status !== 'signed_in') {
+        setAdminLoginError('Confirme seu e-mail antes de entrar.');
+        return;
       }
-
-      if (onLoginSuccess) onLoginSuccess(adminPayload);
-      showToast('Acesso de Administrador confirmado!');
+      saveUserSession(result.user);
+      if (onLoginSuccess) onLoginSuccess(result.user);
+      if (result.user.role === 'admin') {
+        showToast('Acesso de Administrador confirmado!');
+      } else {
+        setAdminLoginError('Esta conta não tem permissão de administrador.');
+      }
     } catch (err: any) {
       console.error('Admin Email Login Error:', err);
-      setAdminLoginError('Senha de administrador incorreta.');
+      setAdminLoginError(err instanceof AuthMessageError ? err.message : 'Não foi possível entrar.');
     } finally {
       setAdminLoginLoading(false);
     }
@@ -477,7 +243,7 @@ export function AdminDashboard({
   };
 
   // If admin is not authenticated, show simplified Google / Email access screen
-  if (!isEmailAdmin) {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden">
         {/* Background glow accents */}
@@ -540,7 +306,7 @@ export function AdminDashboard({
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 pl-9 text-xs text-white placeholder-slate-600 focus:outline-hidden transition-all"
-                    placeholder="Betosouza3322@gmail.com"
+                    placeholder="seu-email@exemplo.com"
                     required
                   />
                   <Mail size={14} className="absolute left-3 top-3 text-slate-500" />
@@ -580,7 +346,7 @@ export function AdminDashboard({
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 size={12} className="text-blue-400" />
-                <span>Firebase Auth & Firestore</span>
+                <span>Supabase Auth & Postgres</span>
               </div>
             </div>
           </div>
@@ -621,7 +387,7 @@ export function AdminDashboard({
           <div className="hidden sm:flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-bold text-slate-300">
-              {currentUser?.email || 'Betosouza3322@gmail.com'}
+              {currentUser?.email}
             </span>
             <button
               onClick={handleAdminLogout}
@@ -1058,7 +824,7 @@ export function AdminDashboard({
                 <div className="p-3 bg-slate-900 rounded-xl border border-slate-700 space-y-1">
                   <div className="font-bold text-white flex items-center gap-1.5">
                     <CheckCircle2 size={14} className="text-emerald-400" />
-                    Sincronização em Nuvem Firebase Firestore
+                    Sincronização em Nuvem Supabase
                   </div>
                   <p className="text-[11px] text-slate-400">
                     Banco de dados em tempo real ativo: ai-studio-d584075f-0a72-4c80-9843-378c0ca75fb2
