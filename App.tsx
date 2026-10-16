@@ -40,9 +40,17 @@ import { FinanceProfile } from './src/components/FinanceProfile.tsx';
 import { AuthModal } from './src/components/AuthModal.tsx';
 import { BrowserExtensionModal } from './src/components/BrowserExtensionModal.tsx';
 import { FloatingExtensionWidget } from './src/components/FloatingExtensionWidget.tsx';
+import { PoliciesPage, PolicySlug, getPolicyFromPath, navigateTo } from './src/components/PoliciesPage.tsx';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<'app' | 'landing' | 'admin'>('landing');
+  // Páginas públicas de políticas (/privacidade, /termos, /reembolso, /cookies)
+  const [policyPage, setPolicyPage] = useState<PolicySlug | null>(() => getPolicyFromPath(window.location.pathname));
+  useEffect(() => {
+    const onPopState = () => setPolicyPage(getPolicyFromPath(window.location.pathname));
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState<boolean>(false);
   const [isFloatingExtensionOpen, setIsFloatingExtensionOpen] = useState<boolean>(false);
@@ -263,6 +271,18 @@ export default function App() {
     setQuickDesc('');
     setQuickAmount('');
   };
+
+  if (policyPage) {
+    return (
+      <PoliciesPage
+        policy={policyPage}
+        onBack={() => {
+          setCurrentView('landing');
+          navigateTo('/');
+        }}
+      />
+    );
+  }
 
   if (currentView === 'landing' || (!currentUser && currentView === 'app')) {
     return (

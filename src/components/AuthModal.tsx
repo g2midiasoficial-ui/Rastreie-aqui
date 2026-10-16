@@ -263,6 +263,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </>
               )}
             </button>
+            {mode === 'register' && (
+              <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                Ao criar a conta, você concorda com os{' '}
+                <a href="/termos" target="_blank" rel="noopener" className="text-blue-600 underline underline-offset-2">Termos de Uso</a>
+                {' '}e a{' '}
+                <a href="/privacidade" target="_blank" rel="noopener" className="text-blue-600 underline underline-offset-2">Política de Privacidade</a>.
+              </p>
+            )}
           </form>
 
           <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold pt-2 border-t border-slate-100">

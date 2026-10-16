@@ -12,6 +12,7 @@ import {
   saveUserSession,
   signInWithGoogle
 } from '../lib/auth.ts';
+import { POLICY_PAGES, navigateTo } from './PoliciesPage.tsx';
 
 interface SalesLandingPageProps {
   onEnterPlatform: () => void;
@@ -767,6 +768,21 @@ export function SalesLandingPage({
             )}
           </div>
         </div>
+        <div className="border-t border-white/5">
+          <nav aria-label="Políticas" className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-2 text-xs text-slate-500">
+            {POLICY_PAGES.map((p) => (
+              <a
+                key={p.slug}
+                href={p.path}
+                onClick={(e) => { e.preventDefault(); navigateTo(p.path); }}
+                className="hover:text-slate-300 transition-colors"
+              >
+                {p.title}
+              </a>
+            ))}
+            <a href="mailto:g2midiasoficial@gmail.com" className="hover:text-slate-300 transition-colors">Contato: g2midiasoficial@gmail.com</a>
+          </nav>
+        </div>
       </footer>
 
       {/* Modal de Autenticação / Acesse Sua Conta ou Crie Seu Perfil Pro */}
@@ -919,6 +935,14 @@ export function SalesLandingPage({
                 >
                   {loading ? 'Processando...' : authMode === 'login' ? 'Acessar Conta' : 'Criar Conta e Acessar'}
                 </button>
+                {authMode === 'register' && (
+                  <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                    Ao criar a conta, você concorda com os{' '}
+                    <a href="/termos" target="_blank" rel="noopener" className="text-slate-300 underline underline-offset-2 hover:text-white">Termos de Uso</a>
+                    {' '}e a{' '}
+                    <a href="/privacidade" target="_blank" rel="noopener" className="text-slate-300 underline underline-offset-2 hover:text-white">Política de Privacidade</a>.
+                  </p>
+                )}
               </form>
             </div>
           </div>
